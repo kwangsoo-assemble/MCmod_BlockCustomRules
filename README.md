@@ -1,5 +1,78 @@
 # MCmod_CullPass
 
+**[한국어](#한국어)** 설명은 아래에 있습니다.
+
+> A Fabric client mod (Minecraft 1.21.8) that makes the blocks you pick **stop hiding the faces of the blocks next to them**.
+> Example: a snow layer (`minecraft:snow`) made invisible with a resource pack no longer leaves a hole in the floor under it.
+
+> This mod was written with an AI coding assistant (Claude Code) and checked by the maintainer in real use.
+
+## At a glance
+
+| Item | Value |
+|---|---|
+| Version | `1.0.0` |
+| Target | Minecraft 1.21.8 · Fabric · **client only** |
+| Requires | Fabric Loader 0.19.3+ · Java 21 (Fabric API is not needed) |
+| Works with | Sodium 0.7.x (same result when Sodium draws the terrain) · Mod Menu (options screen) — runs without either |
+
+## The problem
+
+Whether a block face is drawn is decided **not by that block's model but by the neighbour's occlusion shape** (`getFaceOcclusionShape`).
+So even if you point a block state at the `minecraft:block/air` model to hide it, the neighbour still thinks it is covered and skips the face.
+Put a block with one full side — a snow layer, a closed trapdoor — on the floor, and the top face of the block below disappears like a hole.
+
+## What it does
+
+- When the neighbour is a listed block, the face check returns "draw" — at the head of vanilla `Block.shouldRenderFace` and of Sodium `BlockOcclusionCache.shouldDrawSide`
+- Faces between two blocks of the same kind keep the normal check (glass against glass, etc.)
+- The listed block's own shape, collision and light are unchanged — only more faces get drawn
+
+| File | What |
+|---|---|
+| `mixin/BlockFaceMixin.java` | Vanilla face check (1.21.8 intermediary `method_9607`) |
+| `mixin/SodiumOcclusionMixin.java` | Sodium face check · `@Pseudo`, so it quietly drops out without Sodium |
+| `CullPassConfig.java` | Reads / writes the list (`config/cull_pass.json`) · rebuilds chunks when it changes |
+| `CullPassScreen.java` · `CullPassModMenu.java` | Mod Menu options screen |
+
+⚠ The Sodium side relies on Sodium internals — check the target name and arguments again when upgrading Sodium.
+
+## Settings
+
+In Mod Menu › Cull Pass, write block IDs separated by commas. "Add the block I was looking at" adds the block you were aiming at before opening the screen.
+"Done" saves and redraws the chunks. Unknown IDs are shown in red and ignored.
+
+You can also edit the file (read when the game starts):
+
+```json
+{
+  "blocks": [
+    "minecraft:snow",
+    "minecraft:waxed_oxidized_copper_trapdoor"
+  ]
+}
+```
+
+The first default is the two above. Without a namespace (`snow`) the ID is read as `minecraft:`.
+
+⚠ Only clients with the mod see it — install it on other players' PCs too if they should see the same thing.
+
+## Build
+
+```bash
+# JDK 21
+./gradlew build
+# → build/libs/cull_pass-1.0.0.jar
+```
+
+## License
+
+**MIT** (`LICENSE`).
+
+---
+
+# 한국어
+
 > 옵션에서 고른 블록이 **옆 블록의 면을 가리지 않게** 하는 Fabric 클라이언트 모드다 (Minecraft 1.21.8).
 > 예: 리소스팩으로 투명하게 만든 눈(`minecraft:snow`)을 바닥에 깔아도 그 아래 블록 윗면이 뚫려 보이지 않는다.
 
@@ -53,7 +126,7 @@ Mod Menu › Cull Pass 에서 블록 ID 를 쉼표로 적는다. «바라보던 
 
 처음 기본값은 위 둘이다. 이름공간을 빼면(`snow`) `minecraft:` 로 친다.
 
-⚠ 모드가 깔린 클라이언트에서만 보인다 — 서버 · 다른 사람 화면은 따로 깔아야 같다.
+⚠ 모드가 깔린 클라이언트에서만 보인다 — 다른 사람 화면도 같게 하려면 그 PC 에도 깐다.
 
 ## 빌드
 
