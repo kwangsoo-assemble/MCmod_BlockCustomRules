@@ -1,0 +1,8 @@
+{
+	"cull_pass.title": "Cull Pass",
+	"cull_pass.blocks": "Block IDs",
+	"cull_pass.help": "Listed blocks no longer hide the faces of the blocks next to them.",
+	"cull_pass.help2": "Separate block IDs with commas (e.g. minecraft:snow).",
+	"cull_pass.add_target": "Add the block I was looking at",
+	"cull_pass.unknown": "Unknown blocks (ignored): %s"
+}

@@ -1,0 +1,35 @@
+{
+	"schemaVersion": 1,
+	"id": "cull_pass",
+	"version": "${version}",
+	"name": "Cull Pass",
+	"description": "Blocks you list stop hiding the faces of the blocks next to them — e.g. a transparent-looking snow layer no longer leaves a hole in the floor under it.",
+	"authors": [
+		"kwangsoo"
+	],
+	"contact": {},
+	"license": "MIT",
+	"environment": "client",
+	"entrypoints": {
+		"client": [
+			"kr.asmbl.cull_pass.CullPassClient"
+		],
+		"modmenu": [
+			"kr.asmbl.cull_pass.CullPassModMenu"
+		]
+	},
+	"mixins": [
+		{
+			"config": "cull_pass.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.19.3",
+		"minecraft": "~1.21.8",
+		"java": ">=21"
+	},
+	"suggests": {
+		"modmenu": "*"
+	}
+}
