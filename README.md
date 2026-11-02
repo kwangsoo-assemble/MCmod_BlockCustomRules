@@ -20,7 +20,8 @@
 
 Whether a block face is drawn is decided **not by that block's model but by the neighbour's occlusion shape** (`getFaceOcclusionShape`).
 So even if you point a block state at the `minecraft:block/air` model to hide it, the neighbour still thinks it is covered and skips the face.
-Put a block with one full side — a snow layer, a closed trapdoor — on the floor, and the top face of the block below disappears like a hole.
+Put a block with one full side — a snow layer, a bottom slab — on the floor, and the top face of the block below disappears like a hole.
+(Blocks that never hide their neighbours' faces, such as trapdoors, do not need to be listed.)
 
 ## What it does
 
@@ -47,13 +48,14 @@ You can also edit the file (read when the game starts):
 ```json
 {
   "blocks": [
-    "minecraft:snow",
-    "minecraft:waxed_oxidized_copper_trapdoor"
+    "minecraft:petrified_oak_slab",
+    "minecraft:snow"
   ]
 }
 ```
 
-The first default is the two above. Without a namespace (`snow`) the ID is read as `minecraft:`.
+The first default is `minecraft:petrified_oak_slab` only — the example above adds snow. Without a namespace (`snow`) the ID is read as `minecraft:`.
+⚠ The default is used only when there is no config file — an existing `config/cull_pass.json` is kept as it is.
 
 ⚠ Only clients with the mod see it — install it on other players' PCs too if they should see the same thing.
 
@@ -91,7 +93,8 @@ The first default is the two above. Without a namespace (`snow`) the ID is read 
 
 블록 면을 그릴지는 **그 블록의 모델이 아니라 옆 블록의 가림 모양**(`getFaceOcclusionShape`)이 정한다.
 그래서 블록 상태를 `minecraft:block/air` 모델로 바꿔 안 보이게 해도, 옆 블록은 여전히 «가려졌다» 고 보고 면을 안 그린다.
-눈 한 층 · 닫힌 다락문처럼 한쪽 면이 꽉 찬 블록을 바닥에 놓으면 아래 블록 윗면이 빠져 구멍처럼 보인다.
+눈 한 층 · 아래 반 블록처럼 한쪽 면이 꽉 찬 블록을 바닥에 놓으면 아래 블록 윗면이 빠져 구멍처럼 보인다.
+(다락문처럼 처음부터 옆 면을 안 가리는 블록은 넣을 필요가 없다.)
 
 ## 하는 일
 
@@ -118,13 +121,14 @@ Mod Menu › Cull Pass 에서 블록 ID 를 쉼표로 적는다. «바라보던 
 ```json
 {
   "blocks": [
-    "minecraft:snow",
-    "minecraft:waxed_oxidized_copper_trapdoor"
+    "minecraft:petrified_oak_slab",
+    "minecraft:snow"
   ]
 }
 ```
 
-처음 기본값은 위 둘이다. 이름공간을 빼면(`snow`) `minecraft:` 로 친다.
+처음 기본값은 `minecraft:petrified_oak_slab`(석화된 참나무 반 블록) 하나다 — 위는 눈을 더한 보기. 이름공간을 빼면(`snow`) `minecraft:` 로 친다.
+⚠ 기본값은 설정 파일이 없을 때만 쓰인다 — 이미 있는 `config/cull_pass.json` 은 그대로다.
 
 ⚠ 모드가 깔린 클라이언트에서만 보인다 — 다른 사람 화면도 같게 하려면 그 PC 에도 깐다.
 

@@ -32,7 +32,7 @@ public final class CullPassConfig {
 	private static final Logger LOG = LogUtils.getLogger();
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 	private static final Path FILE = FabricLoader.getInstance().getConfigDir().resolve("cull_pass.json");
-	private static final List<String> DEFAULT_IDS = List.of("minecraft:snow", "minecraft:waxed_oxidized_copper_trapdoor");
+	private static final List<String> DEFAULT_IDS = List.of("minecraft:petrified_oak_slab");
 
 	private static volatile List<String> ids = DEFAULT_IDS;
 	// 블록 등록이 끝나기 전에 ID 를 풀면 모드 블록이 빠진다 — 처음 쓸 때 푼다
