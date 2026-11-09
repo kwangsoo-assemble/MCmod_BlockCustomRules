@@ -343,7 +343,8 @@ public final class FootstepEngine {
 		if (f.bottom != null) {
 			playOne(mc, level, p, f.bottom, ev.action(), Mode.MUFFLED, ev.running(), cam, mix, "bottom");
 		}
-		if (f.through != null) {
+		// ⚠ 정지(stand)는 멈춘 채 나는 사건이라 발 칸을 지나가지 않는다 — 지나감을 틀면 가만히 있어도 풀숲 소리가 계속 난다
+		if (f.through != null && !ev.action().startsWith("stand")) {
 			playOne(mc, level, p, f.through, StepTracker.isSneak(ev.action()) ? "through_sneak" : "through", Mode.THROUGH, ev.running(), cam, mix, "through");
 		}
 		// 신발(D31) — 발 칸 아이템의 장착 소리 이름 + 행동 · 리팩에 있을 때만(그때 땅 반 · 지나감 · 입장 · 퇴장 끔 — 기본 섞기)
