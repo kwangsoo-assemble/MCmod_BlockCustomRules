@@ -46,6 +46,7 @@ public final class McCatalog implements Catalog {
 		return switch (r) {
 			case BLOCK -> BuiltInRegistries.BLOCK;
 			case ENTITY_TYPE -> BuiltInRegistries.ENTITY_TYPE;
+			case FLUID -> BuiltInRegistries.FLUID;
 			case BIOME -> biomes();
 		};
 	}

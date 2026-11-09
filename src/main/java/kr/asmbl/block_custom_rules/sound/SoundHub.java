@@ -7,6 +7,8 @@ import kr.asmbl.block_custom_rules.config.Rules;
 import kr.asmbl.block_custom_rules.debug.SoundDebugger;
 import kr.asmbl.block_custom_rules.rules.Resolved;
 import kr.asmbl.block_custom_rules.step.FootstepEngine;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
+import net.minecraft.util.RandomSource;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
@@ -121,7 +123,7 @@ public final class SoundHub {
 				}
 				return null;
 			}
-			return decide(snap, level == mc.level, state, owner, id, source, packet, seed, volume, pitch, tr);
+			return decide(snap, level == mc.level, state, owner, id, source, packet, seed, volume, pitch, tr, x, y, z);
 		} catch (RuntimeException | LinkageError e) {
 			warnOnce(e);
 			return null;
@@ -136,7 +138,7 @@ public final class SoundHub {
 		Replacement r = null;
 		if (snap.anySoundCategory && SoundNames.split(id) != null) {
 			try {
-				r = decide(snap, true, state, true, id, source, false, 0L, volume, pitch, tr);
+				r = decide(snap, true, state, true, id, source, false, 0L, volume, pitch, tr, x, y, z);
 			} catch (RuntimeException | LinkageError e) {
 				warnOnce(e);
 			}
@@ -148,11 +150,11 @@ public final class SoundHub {
 	}
 
 	private static Replacement decide(Rules.Snapshot snap, boolean sameWorld, BlockState state, boolean owner, String id, SoundSource source,
-			boolean packet, long seed, float volume, float pitch, Trace tr) {
+			boolean packet, long seed, float volume, float pitch, Trace tr, double x, double y, double z) {
 		Resolved r = snap.get(state);
 		String cat = r == null ? null : r.soundCategory();
 		SoundDecision.Result res = SoundDecision.decide(id, source.getName(), packet, seed, sameWorld, cat, owner, snap.categories,
-				SoundHub::defined, SoundHub::registered);
+				FootstepEngine::named, SoundHub::registered);
 		if (tr != null) {
 			tr.block = describe(state) + (cat == null ? "" : " (" + cat + ")");
 			tr.reason = res.reason().replace(' ', '_');
@@ -160,8 +162,25 @@ public final class SoundHub {
 		if (!res.replaces()) {
 			return null;
 		}
+		SoundRules sr = snap.sound;
+		RandomSource rnd = RandomSource.create(seed);
+		if (sr.hasLayers(res.soundId())) {
+			// 겹 소리(D21) — 줄마다 그 자리에서 튼다(지연은 지연 줄로) · 원래 소리는 막는다 · 이 모드가 내는 소리라 음량 상한 3
+			Minecraft mc = Minecraft.getInstance();
+			for (SoundRules.Play pl : sr.expand(res.soundId(), rnd::nextDouble)) {
+				SimpleSoundInstance si = new SimpleSoundInstance(event(pl.name()), source, Math.min(pl.volume(), FootstepEngine.VOLUME_CAP), pl.pitch(),
+						RandomSource.create(rnd.nextLong()), x, y, z);
+				if (pl.delayMs() > 0) {
+					FootstepEngine.DELAYED.add(System.nanoTime(), pl.delayMs() * 1_000_000L, () -> mc.getSoundManager().play(si));
+				} else {
+					mc.getSoundManager().play(si);
+				}
+			}
+			return CANCEL;
+		}
 		SoundEvent ne = event(res.soundId());
-		return res.keepVolumePitch() ? new Replacement(ne, volume, pitch, res.reason()) : new Replacement(ne, 1.0F, 1.0F, res.reason());
+		return res.keepVolumePitch() ? new Replacement(ne, volume, pitch, res.reason())
+				: new Replacement(ne, Math.min(sr.volume.roll(rnd::nextDouble), FootstepEngine.VOLUME_CAP), sr.pitch.roll(rnd::nextDouble), res.reason());
 	}
 
 	/** 서버 걸음 · 떨어짐 패킷 — 발밑 후보 중 원래 그 이름을 낼 블록(첫 후보 먼저) · 없으면 null(바닐라 그대로). */

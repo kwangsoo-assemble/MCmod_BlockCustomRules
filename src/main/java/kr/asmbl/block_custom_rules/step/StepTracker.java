@@ -54,8 +54,8 @@ public final class StepTracker {
 			boolean local) {
 	}
 
-	/** 낼 소리 — 행동(웅크림 붙은 이름) · 발 수(1 = 다음 발 · 2 = 두 발 같이) · 달리는 중(부모 고르기). */
-	public record Event(String action, int feet, boolean running) {
+	/** 낼 소리 — 행동(웅크림 붙은 이름) · 발 수(1 = 다음 발 · 2 = 두 발 같이) · 달리는 중(부모 고르기) · 발밑을 잡을 높이(점프는 뛰기 직전 높이). */
+	public record Event(String action, int feet, boolean running, double y) {
 	}
 
 	private boolean init;
@@ -92,6 +92,7 @@ public final class StepTracker {
 			return out;
 		}
 		double dx = in.x - this.lx;
+		double prevY = this.ly;
 		double dy = in.y - this.ly;
 		double dz = in.z - this.lz;
 		this.lx = in.x;
@@ -105,7 +106,7 @@ public final class StepTracker {
 			if (this.grounded) {
 				this.airTop = in.y;
 				if (in.local && dy > JUMP_DY) {
-					out.add(horiz < JUMP_IN_PLACE ? new Event("wander" + sneak, 2, in.sprinting) : new Event("jump" + sneak, 1, in.sprinting));
+					out.add(horiz < JUMP_IN_PLACE ? new Event("wander" + sneak, 2, in.sprinting, prevY) : new Event("jump" + sneak, 1, in.sprinting, prevY));
 				}
 			}
 			this.airTop = Math.max(this.airTop, in.y);
@@ -116,9 +117,9 @@ public final class StepTracker {
 		if (!this.grounded) {
 			double drop = this.airTop - in.y;
 			if (drop > LAND_HEAVY) {
-				out.add(new Event("land" + sneak, 2, in.sprinting));
+				out.add(new Event("land" + sneak, 2, in.sprinting, in.y));
 			} else if (drop > LAND_LIGHT) {
-				out.add(new Event("land_light" + sneak, 2, in.sprinting));
+				out.add(new Event("land_light" + sneak, 2, in.sprinting, in.y));
 			}
 			this.grounded = true;
 			this.acc = 0.0;
@@ -132,14 +133,14 @@ public final class StepTracker {
 		boolean onLadder = in.climbing && !in.onGround;
 		double rise = in.y - this.stepY;
 		if (!onLadder && rise < -STAIR_HEIGHT) {
-			out.add(new Event("stairs_down" + sneak, 1, in.sprinting));
+			out.add(new Event("stairs_down" + sneak, 1, in.sprinting, in.y));
 			this.acc = 0.0;
 			this.stepY = in.y;
 		} else {
 			boolean up = !onLadder && rise > STAIR_HEIGHT;
 			double interval = onLadder ? LADDER : up ? STAIR : STRIDE;
 			if (this.acc >= interval) {
-				out.add(new Event((up ? "stairs_up" : base(in, onLadder)) + sneak, 1, in.sprinting));
+				out.add(new Event((up ? "stairs_up" : base(in, onLadder)) + sneak, 1, in.sprinting, in.y));
 				// 넘친 거리는 다음 걸음으로 넘긴다(평균 간격이 0.95 가 되게) · 순간 이동처럼 크게 넘치면 버린다
 				this.acc -= interval;
 				if (this.acc >= interval) {
@@ -152,7 +153,7 @@ public final class StepTracker {
 			this.still++;
 			if (this.still == STILL_TICKS) {
 				if (this.acc >= WANDER_MIN) {
-					out.add(new Event("wander" + sneak, 1, in.sprinting));
+					out.add(new Event("wander" + sneak, 1, in.sprinting, in.y));
 				}
 				this.acc = 0.0;
 				this.stepY = in.y;

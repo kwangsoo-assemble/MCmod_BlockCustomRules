@@ -21,7 +21,10 @@ import kr.asmbl.block_custom_rules.rules.Resolver;
 import kr.asmbl.block_custom_rules.rules.RuleFile;
 import kr.asmbl.block_custom_rules.rules.RuleTable;
 import kr.asmbl.block_custom_rules.rules.StateView;
+import kr.asmbl.block_custom_rules.rules.TagRef;
+import kr.asmbl.block_custom_rules.rules.TagView;
 import kr.asmbl.block_custom_rules.sound.SoundCategories;
+import kr.asmbl.block_custom_rules.sound.SoundRules;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.network.chat.Component;
@@ -49,13 +52,15 @@ public final class Rules {
 
 	/** 풀기 결과 한 벌. */
 	public static final class Snapshot {
-		static final Snapshot EMPTY = new Snapshot(RuleTable.EMPTY, new Reference2ObjectOpenHashMap<>(), SoundCategories.EMPTY, new Problems(), List.of(), 1,
+		static final Snapshot EMPTY = new Snapshot(RuleTable.EMPTY, new Reference2ObjectOpenHashMap<>(), SoundCategories.EMPTY, SoundRules.EMPTY, new Problems(), List.of(), 1,
 				"init");
 
 		public final RuleTable table;
 		private final Reference2ObjectOpenHashMap<BlockState, Resolved> byState;
 		/** `sound.categories` · `sound.actions`(이름표 칸 — 위 층 · 나중 파일이 통째로 대신). */
 		public final SoundCategories categories;
+		/** `sound.defaults` · `layers` · `mix` · `entities`. */
+		public final SoundRules sound;
 		/** 소리 종류를 바꾼 블록이 하나라도 있나 — 없으면 소리 갈아끼우기를 바로 건너뛴다. */
 		public final boolean anySoundCategory;
 		public final Problems problems;
@@ -66,23 +71,24 @@ public final class Rules {
 		public final String why;
 		public final boolean anyRender;
 
-		Snapshot(RuleTable table, Reference2ObjectOpenHashMap<BlockState, Resolved> byState, SoundCategories categories, Problems problems,
+		Snapshot(RuleTable table, Reference2ObjectOpenHashMap<BlockState, Resolved> byState, SoundCategories categories, SoundRules sound, Problems problems,
 				List<String> packOrder, int optionsLayer, String why) {
 			this.table = table;
 			this.byState = byState;
 			this.categories = categories;
+			this.sound = sound;
 			this.problems = problems;
 			this.packOrder = packOrder;
 			this.optionsLayer = optionsLayer;
 			this.why = why;
 			boolean render = false;
-			boolean sound = false;
+			boolean anySound = false;
 			for (Resolved r : byState.values()) {
 				render |= r.render() != null;
-				sound |= r.soundCategory() != null;
+				anySound |= r.soundCategory() != null;
 			}
 			this.anyRender = render;
-			this.anySoundCategory = sound;
+			this.anySoundCategory = anySound;
 		}
 
 		public Resolved get(BlockState s) {
@@ -216,7 +222,15 @@ public final class Rules {
 				map.put(((McState) e.getKey()).state, e.getValue());
 			}
 			SoundCategories cats = SoundCategories.read(table.files(), problems);
-			next = new Snapshot(table, map, cats, problems, packOrder, top, why);
+			List<TagRef> refs = new ArrayList<>();
+			TagView topTags = table.tags(top);
+			SoundRules sound = SoundRules.read(table.files(), cat, problems, topTags, refs);
+			for (TagRef ref : refs) {
+				if (cat.tagsReady(ref.registry()) && topTags.members(ref.registry(), ref.tag()) == null) {
+					problems.warn(ref.origin(), ref.path(), "bcr.problem.unknown_tag", "#" + ref.tag());
+				}
+			}
+			next = new Snapshot(table, map, cats, sound, problems, packOrder, top, why);
 		} catch (RuntimeException | LinkageError e) {
 			LOG.warn("[block_custom_rules] 규칙 풀기 실패({}) — 직전 표를 쓴다", why, e);
 			return;

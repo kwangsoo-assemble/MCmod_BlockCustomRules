@@ -6,7 +6,8 @@ package kr.asmbl.block_custom_rules.rules;
 public enum Registry {
 	BLOCK("block"),
 	BIOME("biome"),
-	ENTITY_TYPE("entity_type");
+	ENTITY_TYPE("entity_type"),
+	FLUID("fluid");
 
 	public final String id;
 

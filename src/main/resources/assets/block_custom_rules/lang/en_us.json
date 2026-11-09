@@ -86,5 +86,16 @@
 	"bcr.cmd.names_head": "Sound category %s — name found for each sound (green = its own, yellow = from a parent):",
 	"bcr.cmd.names_original": "(original sound)",
 	"bcr.cmd.names_silent": "(silent)",
-	"bcr.cmd.template_copied": "Copied %s missing names of %s to the clipboard (sounds.json of that namespace) — each points at the sound heard now."
+	"bcr.cmd.template_copied": "Copied %s missing names of %s to the clipboard (sounds.json of that namespace) — each points at the sound heard now.",
+	"bcr.problem.bad_value.precipitation": "precipitation must be \"rain\", \"snow\" or \"none\": %s",
+	"bcr.problem.structures": "structures cannot be checked on the client (structure data is not sent) — the line is skipped.",
+	"bcr.problem.unknown_spot": "Unknown spot or channel %s (ground, top, bottom, through, enter, exit, footwear, chime, mob, *).",
+	"bcr.problem.bad_value.channel": "Channel values must be numbers from 0 to %2$s: %1$s",
+	"bcr.problem.bad_value.delay_ms": "delay_ms must be 0 to 1000: %s",
+	"bcr.problem.bad_value.chance": "chance must be 0 to 1: %s",
+	"bcr.problem.layer_line": "A layer line needs exactly one of \"sound\" or \"include\".",
+	"bcr.problem.layer_cycle": "Layer %s includes itself through a loop — the loop is cut.",
+	"bcr.problem.bad_value.range": "Must be a number or [min, max] (0 or more): %s",
+	"bcr.problem.bad_value.locomotion": "locomotion must be \"biped\", \"quadruped\" or \"none\": %s",
+	"bcr.problem.bad_value.size_scaling": "size_scaling must be true or false: %s"
 }

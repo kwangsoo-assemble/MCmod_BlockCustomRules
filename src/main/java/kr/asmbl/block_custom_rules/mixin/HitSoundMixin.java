@@ -28,6 +28,10 @@ public abstract class HitSoundMixin {
 		if (r == null) {
 			return original.call(event, source, volume, pitch, random, pos);
 		}
+		if (r == SoundHub.CANCEL) {
+			// 겹 소리로 이미 틀었다 — 원래 자리는 무음으로
+			return original.call(event, source, 0.0F, pitch, random, pos);
+		}
 		return original.call(r.event(), source, r.volume(), r.pitch(), random, pos);
 	}
 }

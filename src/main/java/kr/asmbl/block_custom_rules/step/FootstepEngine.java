@@ -11,6 +11,10 @@ import java.util.Map;
 import java.util.Objects;
 import kr.asmbl.block_custom_rules.config.Rules;
 import kr.asmbl.block_custom_rules.debug.SoundDebugger;
+import kr.asmbl.block_custom_rules.game.McWorldProbe;
+import kr.asmbl.block_custom_rules.rules.StateView;
+import kr.asmbl.block_custom_rules.sound.SoundRules;
+import kr.asmbl.block_custom_rules.sound.SoundRules.MixResult;
 import kr.asmbl.block_custom_rules.rules.Resolved;
 import kr.asmbl.block_custom_rules.sound.SoundDecision;
 import kr.asmbl.block_custom_rules.sound.SoundHub;
@@ -21,6 +25,7 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
@@ -62,7 +67,11 @@ public final class FootstepEngine {
 	}
 
 	/** 발 하나가 밟은 것 — 주 소리 블록 · 겹침 아래(먹먹) · 지나감 블록 · 땅. */
-	private record Foot(BlockState primary, BlockState bottom, BlockState through, BlockState ground) {
+	private record Foot(BlockState primary, BlockState bottom, BlockState through, BlockState ground, BlockPos groundPos) {
+		/** 두 발이 같은 블록들을 밟았나(자리는 안 본다) — 같으면 한 번만 낸다(D28). */
+		boolean sameBlocks(Foot o) {
+			return this.primary == o.primary && this.bottom == o.bottom && this.through == o.through && this.ground == o.ground;
+		}
 	}
 
 	private static final class Tracked {
@@ -157,7 +166,8 @@ public final class FootstepEngine {
 		List<StepTracker.Event> events = t.steps.tick(in);
 
 		// 입장 · 퇴장 — 발 칸의 소리 종류가 바뀔 때(D29)
-		BlockPos feetPos = p.getOnPosLegacy().above();
+		BlockPos onPos = p.getOnPosLegacy();
+		BlockPos feetPos = onPos.above();
 		if (level.hasChunkAt(feetPos)) {
 			BlockState feet = level.getBlockState(feetPos);
 			String key = feetKey(feet);
@@ -166,10 +176,12 @@ public final class FootstepEngine {
 			} else if (!Objects.equals(key, t.feetKey)) {
 				String sneak = sneaking ? "_sneak" : "";
 				if (t.feetKey != null) {
-					playOne(mc, level, p, t.feetState, "exit" + sneak, Mode.THROUGH, false, cam);
+					Map<String, BlockState> spots = Map.of("exit", t.feetState);
+					playOne(mc, level, p, t.feetState, "exit" + sneak, Mode.THROUGH, false, cam, mixFor(level, p, spots, "exit", sneaking, onPos), "exit");
 				}
 				if (key != null) {
-					playOne(mc, level, p, feet, "enter" + sneak, Mode.THROUGH, false, cam);
+					Map<String, BlockState> spots = Map.of("enter", feet);
+					playOne(mc, level, p, feet, "enter" + sneak, Mode.THROUGH, false, cam, mixFor(level, p, spots, "enter", sneaking, onPos), "enter");
 				}
 			}
 			t.feetKey = key;
@@ -178,19 +190,19 @@ public final class FootstepEngine {
 
 		for (StepTracker.Event ev : events) {
 			if (ev.feet() == 2) {
-				Foot l = foot(level, p, false);
-				Foot r = foot(level, p, true);
-				if (l != null && r != null && l.equals(r)) {
-					play(mc, level, p, l, ev, cam);
+				Foot l = foot(level, p, false, ev.y());
+				Foot r = foot(level, p, true, ev.y());
+				if (l != null && r != null && l.sameBlocks(r)) {
+					play(mc, level, p, l, ev, cam, sneaking);
 				} else {
-					play(mc, level, p, l, ev, cam);
-					play(mc, level, p, r, ev, cam);
+					play(mc, level, p, l, ev, cam, sneaking);
+					play(mc, level, p, r, ev, cam, sneaking);
 				}
 			} else {
-				Foot f = foot(level, p, t.steps.nextFoot());
-				play(mc, level, p, f, ev, cam);
+				Foot f = foot(level, p, t.steps.nextFoot(), ev.y());
+				MixResult mix = play(mc, level, p, f, ev, cam, sneaking);
 				if (f != null && !StepTracker.isSneak(ev.action()) && VanillaSteps.crystal(f.ground.getBlock())) {
-					chime(mc, level, p, t, f.ground, cam);
+					chime(mc, level, p, t, f.ground, cam, mix);
 				}
 			}
 		}
@@ -210,50 +222,83 @@ public final class FootstepEngine {
 	}
 
 	/** 발 하나의 블록들(D27 · D29) — 발 자리(몸 방향 좌우 0.2 × 크기)가 공기 · 빈 소리면 바닐라 받침 블록. */
-	private static Foot foot(ClientLevel level, Player p, boolean right) {
+	private static Foot foot(ClientLevel level, Player p, boolean right, double y) {
 		double[] off = StepTracker.footOffset(p.yBodyRot, right, p.getBbWidth() / 0.6);
-		BlockPos gp = BlockPos.containing(p.getX() + off[0], p.getY() - 0.2, p.getZ() + off[1]);
+		BlockPos gp = BlockPos.containing(p.getX() + off[0], y - 0.2, p.getZ() + off[1]);
 		if (!level.hasChunkAt(gp)) {
 			return null;
 		}
 		BlockState ground = level.getBlockState(gp);
 		if (ground.isAir() || ground.getSoundType() == SoundType.EMPTY) {
-			gp = p.getOnPosLegacy();
+			gp = Math.abs(y - p.getY()) < 1.0e-6 ? p.getOnPosLegacy() : BlockPos.containing(p.getX(), y - 0.2, p.getZ());
 			if (!level.hasChunkAt(gp)) {
 				return null;
 			}
 			ground = level.getBlockState(gp);
+			// ⚠ 공기의 소리 종류는 돌이다 — 끝내 공기면 소리를 내지 않는다(점프 때 공기를 «돌» 로 밟던 것)
+			if (ground.isAir() || ground.getSoundType() == SoundType.EMPTY) {
+				return null;
+			}
 		}
 		BlockPos fp = gp.above();
 		BlockState feet = level.getBlockState(fp);
 		if (feet.isAir()) {
-			return new Foot(ground, null, null, ground);
+			return new Foot(ground, null, null, ground, gp);
 		}
 		Resolved fr = Rules.get(feet);
 		if (VanillaSteps.inside(feet.getBlock())) {
 			// 안쪽 블록 — 리팩에 그 종류의 through 가 있으면 땅 + 지나감 · 없으면 땅 대신(바닐라)
-			return hasName(feet, "through") ? new Foot(ground, null, feet, ground) : new Foot(feet, null, null, ground);
+			return hasName(feet, "through") ? new Foot(ground, null, feet, ground, gp) : new Foot(feet, null, null, ground, gp);
 		}
 		if (VanillaSteps.combination(feet.getBlock()) || (fr != null && fr.stepAsGround())) {
-			return new Foot(feet, ground, null, ground);
+			return new Foot(feet, ground, null, ground, gp);
 		}
 		if (feet.getCollisionShape(level, fp).isEmpty()) {
-			return new Foot(ground, null, feet, ground);
+			return new Foot(ground, null, feet, ground, gp);
 		}
-		return new Foot(ground, null, null, ground);
+		return new Foot(ground, null, null, ground, gp);
 	}
 
-	private static void play(Minecraft mc, ClientLevel level, Player p, Foot f, StepTracker.Event ev, Vec3 cam) {
+	/** 발 하나 — 땅(또는 겹침 위) · 겹침 아래 · 지나감 · 섞기 줄의 더하기. 그 걸음의 섞기 결과를 돌려준다(종소리가 같이 쓴다). */
+	private static MixResult play(Minecraft mc, ClientLevel level, Player p, Foot f, StepTracker.Event ev, Vec3 cam, boolean sneaking) {
 		if (f == null) {
-			return;
+			return SoundRules.NO_MIX;
 		}
-		playOne(mc, level, p, f.primary, ev.action(), Mode.NORMAL, ev.running(), cam);
+		Map<String, BlockState> spots = new java.util.HashMap<>();
+		spots.put("ground", f.ground);
 		if (f.bottom != null) {
-			playOne(mc, level, p, f.bottom, ev.action(), Mode.MUFFLED, ev.running(), cam);
+			spots.put("top", f.primary);
+			spots.put("bottom", f.bottom);
 		}
 		if (f.through != null) {
-			playOne(mc, level, p, f.through, StepTracker.isSneak(ev.action()) ? "through_sneak" : "through", Mode.THROUGH, ev.running(), cam);
+			spots.put("through", f.through);
 		}
+		String base = StepTracker.isSneak(ev.action()) ? ev.action().substring(0, ev.action().length() - 6) : ev.action();
+		MixResult mix = mixFor(level, p, spots, base, sneaking, f.groundPos);
+		playOne(mc, level, p, f.primary, ev.action(), Mode.NORMAL, ev.running(), cam, mix, f.bottom != null ? "top" : "ground");
+		if (f.bottom != null) {
+			playOne(mc, level, p, f.bottom, ev.action(), Mode.MUFFLED, ev.running(), cam, mix, "bottom");
+		}
+		if (f.through != null) {
+			playOne(mc, level, p, f.through, StepTracker.isSneak(ev.action()) ? "through_sneak" : "through", Mode.THROUGH, ev.running(), cam, mix, "through");
+		}
+		// 섞기 줄의 더하기(D22 · D30) — `<이름>.<행동>` 을 더 튼다(젖음 등) · 리팩에 있을 때만
+		for (String add : mix.add()) {
+			playNamed(mc, level, p, add + "." + ev.action(), cam, mix, "*", f.ground, ev.action());
+		}
+		return mix;
+	}
+
+	/** 그 걸음의 섞기 결과 — 섞기 줄이 없으면 바로 빈 결과. */
+	private static MixResult mixFor(ClientLevel level, Player p, Map<String, BlockState> spots, String action, boolean sneaking, BlockPos at) {
+		SoundRules rules = Rules.snapshot().sound;
+		if (rules.mix().isEmpty()) {
+			return SoundRules.NO_MIX;
+		}
+		Map<String, StateView> views = new java.util.HashMap<>();
+		spots.forEach((k, v) -> views.put(k, McWorldProbe.view(v)));
+		String type = BuiltInRegistries.ENTITY_TYPE.getKey(p.getType()).toString();
+		return rules.mix(new SoundRules.MixContext(views, type, action, sneaking, false, new McWorldProbe(level), at.getX(), at.getY(), at.getZ()));
 	}
 
 	/** 그 블록의 소리 종류 — 규칙의 종류 · 없으면 바닐라 걸음 소리의 가운데 이름(`minecraft:<가운데>`) · 빈 소리면 null. */
@@ -266,13 +311,22 @@ public final class FootstepEngine {
 		return mid == null ? null : "minecraft:" + mid;
 	}
 
-	private static boolean hasName(BlockState s, String action) {
-		String cat = category(s);
-		return cat != null && Rules.snapshot().categories.find(cat, action, StepTracker.PARENTS_WALK, SoundHub::defined) != null;
+	/** 이름이 있나 — 겹 소리(`layers`) 또는 리팩 · 바닐라 `sounds.json`(D15 의 차례). */
+	public static boolean named(String name) {
+		return Rules.snapshot().sound.hasLayers(name) || SoundHub.defined(name);
 	}
 
-	/** 소리 하나 — 종류 › 행동 › 부모 › 끝내 없으면 바닐라 걸음(웅크림 · 지나감 · 입장 · 퇴장은 무음). */
-	private static void playOne(Minecraft mc, ClientLevel level, Player p, BlockState state, String action, Mode mode, boolean running, Vec3 cam) {
+	private static boolean hasName(BlockState s, String action) {
+		String cat = category(s);
+		return cat != null && Rules.snapshot().categories.find(cat, action, StepTracker.PARENTS_WALK, FootstepEngine::named) != null;
+	}
+
+	/** 소리 하나 — 종류 › 행동 › 부모 › 끝내 없으면 바닐라 걸음(웅크림 · 지나감 · 입장 · 퇴장은 무음). 섞기 채널 배율 · 지연을 곱한다. */
+	private static void playOne(Minecraft mc, ClientLevel level, Player p, BlockState state, String action, Mode mode, boolean running, Vec3 cam,
+			MixResult mix, String channel) {
+		if (mix.volume(channel) <= 0.0F) {
+			return;
+		}
 		String cat = category(state);
 		if (cat == null) {
 			return;
@@ -283,54 +337,81 @@ public final class FootstepEngine {
 			return;
 		}
 		Map<String, String> parents = running ? StepTracker.PARENTS_RUN : StepTracker.PARENTS_WALK;
-		String name = snap.categories.find(cat, action, parents, SoundHub::defined);
+		String name = snap.categories.find(cat, action, parents, FootstepEngine::named);
 		SoundType t = state.getSoundType();
-		SoundEvent ev;
-		boolean vanilla;
+		String note = action + (mode == Mode.MUFFLED ? " · muffled" : "");
 		if (name == null) {
 			if (mode == Mode.THROUGH || StepTracker.isSneak(action)) {
 				return;
 			}
-			ev = t.getStepSound();
+			SoundEvent ev = t.getStepSound();
 			if (ev == SoundEvents.EMPTY) {
 				return;
 			}
-			vanilla = true;
-		} else {
-			ev = SoundHub.event(name);
-			vanilla = SoundHub.registered(name);
+			vanillaPlay(mc, level, p, ev, t, mode, action, cam, mix, channel, state, note);
+			return;
 		}
-		float vol;
-		float pitch;
-		if (vanilla) {
-			vol = t.getVolume() * (mode == Mode.MUFFLED ? 0.05F : 0.15F) * StepTracker.vanillaFactor(action);
-			pitch = t.getPitch() * (mode == Mode.MUFFLED ? 0.8F : 1.0F);
-		} else {
-			// 리팩 이름은 리팩 정의대로(D16) — 겹침 아래만 바닐라 비율(0.05 / 0.15 · 높낮이 0.8)
-			vol = mode == Mode.MUFFLED ? 1.0F / 3.0F : 1.0F;
-			pitch = mode == Mode.MUFFLED ? 0.8F : 1.0F;
+		if (!snap.sound.hasLayers(name) && SoundHub.registered(name)) {
+			vanillaPlay(mc, level, p, SoundHub.event(name), t, mode, action, cam, mix, channel, state, note);
+			return;
 		}
-		emit(mc, level, p, ev, vol, pitch, cam, state, action + (mode == Mode.MUFFLED ? " · muffled" : ""));
+		// 리팩 이름 · 겹 소리 — 리팩 정의대로(D16 · D21) · 겹침 아래만 바닐라 비율(0.05 / 0.15 · 높낮이 0.8)
+		float mv = mode == Mode.MUFFLED ? 1.0F / 3.0F : 1.0F;
+		float mp = mode == Mode.MUFFLED ? 0.8F : 1.0F;
+		for (SoundRules.Play pl : snap.sound.expand(name, level.random::nextDouble)) {
+			emit(mc, level, p, SoundHub.event(pl.name()), pl.volume() * mv * mix.volume(channel), pl.pitch() * mp * mix.pitch(channel),
+					pl.delayMs() + mix.delay(channel), cam, state, note);
+		}
+	}
+
+	/** 바닐라답게 — 종류 음량 × 0.15(먹먹 0.05 · 높낮이 0.8) · `wander` 반 · 섞기 배율. */
+	private static void vanillaPlay(Minecraft mc, ClientLevel level, Player p, SoundEvent ev, SoundType t, Mode mode, String action, Vec3 cam,
+			MixResult mix, String channel, BlockState state, String note) {
+		float vol = t.getVolume() * (mode == Mode.MUFFLED ? 0.05F : 0.15F) * StepTracker.vanillaFactor(action) * mix.volume(channel);
+		float pitch = t.getPitch() * (mode == Mode.MUFFLED ? 0.8F : 1.0F) * mix.pitch(channel);
+		emit(mc, level, p, ev, vol, pitch, mix.delay(channel), cam, state, note);
+	}
+
+	/** 섞기 줄의 더하기 이름 — 겹 소리 · 리팩에 있을 때만 리팩 정의대로. */
+	private static void playNamed(Minecraft mc, ClientLevel level, Player p, String name, Vec3 cam, MixResult mix, String channel, BlockState state,
+			String action) {
+		SoundRules rules = Rules.snapshot().sound;
+		if (!named(name)) {
+			return;
+		}
+		for (SoundRules.Play pl : rules.expand(name, level.random::nextDouble)) {
+			emit(mc, level, p, SoundHub.event(pl.name()), pl.volume() * mix.volume(channel), pl.pitch() * mix.pitch(channel), pl.delayMs() + mix.delay(channel),
+					cam, state, action + " · add");
+		}
 	}
 
 	/** 자수정 종소리(바닐라 식 · 20틱마다 · 세기 × 0.997^틱 + 0.07). 종류를 바꿨으면 `<종류>.chime` · 없으면 바닐라. */
-	private static void chime(Minecraft mc, ClientLevel level, Player p, Tracked t, BlockState ground, Vec3 cam) {
-		if (p.tickCount < t.lastChimeTick + 20) {
+	private static void chime(Minecraft mc, ClientLevel level, Player p, Tracked t, BlockState ground, Vec3 cam, MixResult mix) {
+		if (p.tickCount < t.lastChimeTick + 20 || mix.volume("chime") <= 0.0F) {
 			return;
 		}
 		t.chime = Math.min(1.0F, t.chime * (float) Math.pow(0.997, p.tickCount - t.lastChimeTick) + 0.07F);
 		t.lastChimeTick = p.tickCount;
 		String cat = category(ground);
-		String name = cat == null ? null : Rules.snapshot().categories.find(cat, "chime", Map.of(), SoundHub::defined);
+		String name = cat == null ? null : Rules.snapshot().categories.find(cat, "chime", Map.of(), FootstepEngine::named);
+		if (name != null && Rules.snapshot().sound.hasLayers(name)) {
+			playNamed(mc, level, p, name, cam, mix, "chime", ground, "chime");
+			return;
+		}
 		boolean vanilla = name == null || SoundHub.registered(name);
 		SoundEvent ev = name == null ? SoundEvents.AMETHYST_BLOCK_CHIME : SoundHub.event(name);
-		float vol = vanilla ? 0.1F + t.chime * 1.2F : 1.0F;
-		float pitch = vanilla ? 0.5F + t.chime * level.random.nextFloat() * 1.2F : 1.0F;
-		emit(mc, level, p, ev, vol, pitch, cam, ground, "chime");
+		float vol = (vanilla ? 0.1F + t.chime * 1.2F : Rules.snapshot().sound.volume.roll(level.random::nextDouble)) * mix.volume("chime");
+		float pitch = (vanilla ? 0.5F + t.chime * level.random.nextFloat() * 1.2F : Rules.snapshot().sound.pitch.roll(level.random::nextDouble))
+				* mix.pitch("chime");
+		emit(mc, level, p, ev, vol, pitch, mix.delay("chime"), cam, ground, "chime");
 	}
 
-	/** 튼다 — 카메라에서 10칸 넘으면 ⌊거리 / 2⌋ 틱 늦게(D34). 지연 줄에는 소리 재료만 든다. */
-	private static void emit(Minecraft mc, ClientLevel level, Player p, SoundEvent ev, float vol, float pitch, Vec3 cam, BlockState block, String action) {
+	/** 튼다 — 섞기 · 겹 소리 지연 + 카메라에서 10칸 넘으면 ⌊거리 / 2⌋ 틱(D34). 지연 줄에는 소리 재료만 든다. */
+	private static void emit(Minecraft mc, ClientLevel level, Player p, SoundEvent ev, float vol, float pitch, int delayMs, Vec3 cam, BlockState block,
+			String action) {
+		if (vol <= 0.0F) {
+			return;
+		}
 		if (SoundDebugger.active()) {
 			String cat = category(block);
 			SoundDebugger.record(SoundDebugger.Origin.ENGINE, p.getX(), p.getY(), p.getZ(), ev.location().toString(), null, action,
@@ -339,8 +420,12 @@ public final class FootstepEngine {
 		SimpleSoundInstance si = new SimpleSoundInstance(ev, SoundSource.PLAYERS, Math.min(vol, VOLUME_CAP), pitch,
 				RandomSource.create(level.random.nextLong()), p.getX(), p.getY(), p.getZ());
 		double dist = Math.sqrt(p.distanceToSqr(cam));
+		long delay = Math.max(0, delayMs) * 1_000_000L;
 		if (p != mc.player && dist > FAR) {
-			DELAYED.add(System.nanoTime(), (long) Math.floor(dist / 2.0) * 50_000_000L, () -> mc.getSoundManager().play(si));
+			delay += (long) Math.floor(dist / 2.0) * 50_000_000L;
+		}
+		if (delay > 0) {
+			DELAYED.add(System.nanoTime(), delay, () -> mc.getSoundManager().play(si));
 		} else {
 			mc.getSoundManager().play(si);
 		}

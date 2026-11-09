@@ -86,5 +86,16 @@
 	"bcr.cmd.names_head": "소리 종류 %s — 소리마다 찾아지는 이름(초록 = 자기 이름 · 노랑 = 부모에서):",
 	"bcr.cmd.names_original": "(원래 소리)",
 	"bcr.cmd.names_silent": "(무음)",
-	"bcr.cmd.template_copied": "%s개 빠진 이름(%s)을 클립보드에 복사했습니다(그 이름공간의 sounds.json) — 저마다 지금 들리는 소리를 가리킵니다."
+	"bcr.cmd.template_copied": "%s개 빠진 이름(%s)을 클립보드에 복사했습니다(그 이름공간의 sounds.json) — 저마다 지금 들리는 소리를 가리킵니다.",
+	"bcr.problem.bad_value.precipitation": "precipitation 은 \"rain\" · \"snow\" · \"none\" 중 하나입니다: %s",
+	"bcr.problem.structures": "structures 는 클라에서 볼 수 없습니다(구조물 정보가 안 온다) — 그 줄을 버립니다.",
+	"bcr.problem.unknown_spot": "모르는 자리 · 채널 %s (ground · top · bottom · through · enter · exit · footwear · chime · mob · *)",
+	"bcr.problem.bad_value.channel": "채널 값은 0 ~ %2$s 의 수입니다: %1$s",
+	"bcr.problem.bad_value.delay_ms": "delay_ms 는 0 ~ 1000 입니다: %s",
+	"bcr.problem.bad_value.chance": "chance 는 0 ~ 1 입니다: %s",
+	"bcr.problem.layer_line": "겹 소리 줄은 \"sound\" · \"include\" 중 하나만 적습니다.",
+	"bcr.problem.layer_cycle": "겹 소리 %s 가 돌고 돌아 자기를 끌어옵니다 — 그 고리는 끊습니다.",
+	"bcr.problem.bad_value.range": "수 하나 또는 [최소, 최대](0 이상)입니다: %s",
+	"bcr.problem.bad_value.locomotion": "locomotion 은 \"biped\" · \"quadruped\" · \"none\" 중 하나입니다: %s",
+	"bcr.problem.bad_value.size_scaling": "size_scaling 은 true · false 중 하나입니다: %s"
 }
