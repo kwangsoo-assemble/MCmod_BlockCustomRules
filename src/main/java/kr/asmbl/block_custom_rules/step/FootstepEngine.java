@@ -39,9 +39,12 @@ import net.minecraft.world.phys.Vec3;
 import org.slf4j.Logger;
 
 /**
- * 발소리 엔진(D24 ~ D29 · D33 ~ D35) — 이번 판(T4)은 플레이어(나 · 남)만 맡는다. 몹은 바닐라 그대로(T10).
- * 대상: 카메라 16칸 · 최대 50(가까운 순) · 빼기: 관전자 · 잠 · 탄 엔티티 · 물속(헤엄은 바닐라 그대로) · 무음은 맡되 소리를 안 낸다.
- * 맡는 플레이어는 바닐라 걸음을 끄고(내 것 = 클라 쪽 `walkingStepSound` · 남의 것 = 서버 걸음 패킷) 이 엔진이 낸다.
+ * 발소리 엔진(D24 ~ D35) — 플레이어(나 · 남)와 몹.
+ * 대상: 카메라 16칸 · 최대 50(플레이어 먼저 · 가까운 순) · 빼기: 관전자 · 잠 · 탄 엔티티 · 물속(헤엄은 바닐라 그대로) · `locomotion: none` ·
+ * 걸음 소리를 안 내는 몹(바닐라 움직임 내보내기가 소리 없음) · 무음은 맡되 소리를 안 낸다.
+ * 맡는 엔티티는 바닐라 걸음을 끄고(내 것 = 클라 쪽 `walkingStepSound` · 남 · 몹 = 서버 걸음 패킷) 이 엔진이 낸다.
+ * 몹: 걸음마다 그 몹의 바닐라 걸음 함수를 불러 몹 전용 소리 · 말 질주 · 종소리를 그대로 낸다(채널 `mob`) · 블록 걸음 채널은 기본 0(D22).
+ * 간격: 0.95 × 몹 고유 간격(거북 0.15 · 스트라이더 0.6 · 워든 0.55) · 네 발 · 크기는 `entities` 규칙대로.
  * 걸음마다 발 하나(왼 · 오른 번갈아) — 발 자리 블록 · 발 칸(안쪽 · 겹침 · `step_as` · 지나감) · 자수정 종소리 · 입장 · 퇴장.
  * 소리 이름은 종류 → 행동 → 행동 부모 → 부모 종류 → 끝내 없으면 그 블록의 바닐라 걸음(웅크림 · 지나감 · 입장 · 퇴장은 무음).
  * 상태는 엔티티 id 로만 든다(D40) — 세대가 바뀌면 다 버린다.
@@ -61,6 +64,14 @@ public final class FootstepEngine {
 	/** 이번 틱에 맡은 엔티티(무음 포함) — 서버 걸음 패킷을 막을 때 본다. */
 	private static final IntOpenHashSet HANDLED = new IntOpenHashSet();
 	private static boolean warned;
+	/** 지금 소리를 내는 엔티티의 높낮이 나눗수(크기) · 출처 · 몹인가 — 렌더 스레드의 틱 안에서만 쓴다. */
+	private static float curSize = 1.0F;
+	private static SoundSource curSource = SoundSource.PLAYERS;
+	private static boolean curMob;
+	/** 걸음 소리를 바꾸는 몹 고유 간격(바닐라 `nextStep`) — 나머지는 1. */
+	private static final Map<String, Double> STRIDES = Map.of("minecraft:turtle", 0.15, "minecraft:strider", 0.6, "minecraft:warden", 0.55);
+	/** 바닐라가 걸음 함수를 부르는 행동 — 몹은 이 행동에서만 바닐라 걸음을 낸다. */
+	private static final java.util.Set<String> MOVING = java.util.Set.of("step", "run", "stairs_up", "stairs_down", "climb", "crawl");
 
 	private enum Mode {
 		NORMAL, MUFFLED, THROUGH
@@ -81,6 +92,8 @@ public final class FootstepEngine {
 		BlockState feetState;
 		int lastChimeTick = Integer.MIN_VALUE / 2;
 		float chime;
+		double lx = Double.NaN;
+		double lz;
 	}
 
 	private FootstepEngine() {
@@ -106,6 +119,19 @@ public final class FootstepEngine {
 		return e.isAlive() && !e.isSpectator() && !e.isPassenger() && !e.isInWater() && !(e instanceof LivingEntity l && l.isSleeping());
 	}
 
+	/** 이 엔진이 맡는 엔티티인가 — 플레이어는 늘 · 몹은 바닐라가 걸음 소리를 내는 몹이고 `locomotion: none` 이 아닐 때. */
+	private static boolean takes(LivingEntity e) {
+		SoundRules.EntityLine rule = Rules.snapshot().sound.entity(typeId(e));
+		if (rule != null && "none".equals(rule.locomotion())) {
+			return false;
+		}
+		return e instanceof Player || ((kr.asmbl.block_custom_rules.mixin.EntityStepAccess) e).bcr$movementEmission().emitsSounds();
+	}
+
+	private static String typeId(Entity e) {
+		return BuiltInRegistries.ENTITY_TYPE.getKey(e.getType()).toString();
+	}
+
 	// ── 틱 ──
 
 	public static void tick(Minecraft mc) {
@@ -117,20 +143,21 @@ public final class FootstepEngine {
 		}
 		try {
 			Vec3 cam = mc.gameRenderer.getMainCamera().getPosition();
-			List<AbstractClientPlayer> near = new ArrayList<>();
+			List<LivingEntity> near = new ArrayList<>();
 			EntityTracker.forEach(level, e -> {
-				if (e instanceof AbstractClientPlayer p && p.distanceToSqr(cam) <= RANGE * RANGE) {
-					near.add(p);
+				if (e instanceof LivingEntity l && !(e instanceof net.minecraft.world.entity.decoration.ArmorStand) && l.distanceToSqr(cam) <= RANGE * RANGE) {
+					near.add(l);
 				}
 			});
-			near.sort(Comparator.comparingDouble(p -> p.distanceToSqr(cam)));
+			// 플레이어 먼저 · 가까운 순(D24)
+			near.sort(Comparator.comparing((LivingEntity l) -> !(l instanceof Player)).thenComparingDouble(l -> l.distanceToSqr(cam)));
 			IntOpenHashSet live = new IntOpenHashSet();
 			int n = 0;
-			for (AbstractClientPlayer p : near) {
+			for (LivingEntity p : near) {
 				if (n >= MAX) {
 					break;
 				}
-				if (!eligible(p)) {
+				if (!eligible(p) || !takes(p)) {
 					continue;
 				}
 				n++;
@@ -159,10 +186,28 @@ public final class FootstepEngine {
 		}
 	}
 
-	private static void tickOne(Minecraft mc, ClientLevel level, Player p, Tracked t, Vec3 cam) {
-		boolean sneaking = p.isShiftKeyDown();
-		StepTracker.Input in = new StepTracker.Input(p.getX(), p.getY(), p.getZ(), p.onGround(), p.onClimbable(), p.isSprinting(), sneaking,
-				p.isVisuallyCrawling(), p == mc.player);
+	private static void tickOne(Minecraft mc, ClientLevel level, LivingEntity p, Tracked t, Vec3 cam) {
+		boolean mob = !(p instanceof Player);
+		SoundRules.EntityLine rule = Rules.snapshot().sound.entity(typeId(p));
+		boolean quad = rule != null && "quadruped".equals(rule.locomotion());
+		float size = rule != null && Boolean.TRUE.equals(rule.sizeScaling()) ? (float) StepTracker.sizeFactor(p.getScale()) : 1.0F;
+		curSize = size <= 0.05F ? 1.0F : size;
+		curSource = mob ? p.getSoundSource() : SoundSource.PLAYERS;
+		curMob = mob;
+		boolean sneaking = !mob && p.isShiftKeyDown();
+		// 달리기 — 플레이어는 달리기 표시 · 몹은 위치 차 속도² > 0.022(PF)
+		boolean sprint;
+		if (mob) {
+			double dx = Double.isNaN(t.lx) ? 0.0 : p.getX() - t.lx;
+			double dz = Double.isNaN(t.lx) ? 0.0 : p.getZ() - t.lz;
+			sprint = dx * dx + dz * dz > 0.022;
+		} else {
+			sprint = p.isSprinting();
+		}
+		t.lx = p.getX();
+		t.lz = p.getZ();
+		StepTracker.Input in = new StepTracker.Input(p.getX(), p.getY(), p.getZ(), p.onGround(), p.onClimbable(), sprint, sneaking,
+				!mob && p.isVisuallyCrawling(), p == mc.player, STRIDES.getOrDefault(typeId(p), 1.0), quad, curSize);
 		List<StepTracker.Event> events = t.steps.tick(in);
 
 		// 입장 · 퇴장 — 발 칸의 소리 종류가 바뀔 때(D29)
@@ -201,10 +246,29 @@ public final class FootstepEngine {
 			} else {
 				Foot f = foot(level, p, t.steps.nextFoot(), ev.y());
 				MixResult mix = play(mc, level, p, f, ev, cam, sneaking);
-				if (f != null && !StepTracker.isSneak(ev.action()) && VanillaSteps.crystal(f.ground.getBlock())) {
+				if (mob) {
+					mobVanilla(mc, p, f, ev, cam, mix);
+				} else if (f != null && !StepTracker.isSneak(ev.action()) && VanillaSteps.crystal(f.ground.getBlock())) {
 					chime(mc, level, p, t, f.ground, cam, mix);
 				}
 			}
+		}
+	}
+
+	/** 몹 바닐라 걸음(D32) — 움직이는 걸음에서만 그 몹의 바닐라 함수를 부른다(몹 전용 소리 · 말 질주 · 종소리 · 안쪽 블록 그대로). 채널 `mob`. */
+	private static void mobVanilla(Minecraft mc, LivingEntity p, Foot f, StepTracker.Event ev, Vec3 cam, MixResult mix) {
+		if (f == null || !MOVING.contains(ev.action()) || mix.volume("mob") <= 0.0F || p.isSilent()) {
+			return;
+		}
+		double dist = Math.sqrt(p.distanceToSqr(cam));
+		long delay = (dist > FAR ? (long) Math.floor(dist / 2.0) * 50_000_000L : 0L) + Math.max(0, mix.delay("mob")) * 1_000_000L;
+		// 몹 소리는 몹 위치(공기)에서 나므로 밟은 블록을 걸어 둬야 블록 걸음이 그 블록 규칙으로 갈아끼워진다
+		net.minecraft.world.level.block.state.BlockState prev = kr.asmbl.block_custom_rules.sound.HeldBlock.swap(f.ground);
+		try {
+			MobPlay.run(mix.volume("mob"), curSize / Math.max(0.01F, mix.pitch("mob")), delay,
+					() -> ((kr.asmbl.block_custom_rules.mixin.EntityStepAccess) p).bcr$walkingStepSound(f.groundPos, f.ground));
+		} finally {
+			kr.asmbl.block_custom_rules.sound.HeldBlock.restore(prev);
 		}
 	}
 
@@ -222,7 +286,7 @@ public final class FootstepEngine {
 	}
 
 	/** 발 하나의 블록들(D27 · D29) — 발 자리(몸 방향 좌우 0.2 × 크기)가 공기 · 빈 소리면 바닐라 받침 블록. */
-	private static Foot foot(ClientLevel level, Player p, boolean right, double y) {
+	private static Foot foot(ClientLevel level, LivingEntity p, boolean right, double y) {
 		double[] off = StepTracker.footOffset(p.yBodyRot, right, p.getBbWidth() / 0.6);
 		BlockPos gp = BlockPos.containing(p.getX() + off[0], y - 0.2, p.getZ() + off[1]);
 		if (!level.hasChunkAt(gp)) {
@@ -260,7 +324,7 @@ public final class FootstepEngine {
 	}
 
 	/** 발 하나 — 땅(또는 겹침 위) · 겹침 아래 · 지나감 · 섞기 줄의 더하기. 그 걸음의 섞기 결과를 돌려준다(종소리가 같이 쓴다). */
-	private static MixResult play(Minecraft mc, ClientLevel level, Player p, Foot f, StepTracker.Event ev, Vec3 cam, boolean sneaking) {
+	private static MixResult play(Minecraft mc, ClientLevel level, LivingEntity p, Foot f, StepTracker.Event ev, Vec3 cam, boolean sneaking) {
 		if (f == null) {
 			return SoundRules.NO_MIX;
 		}
@@ -282,6 +346,11 @@ public final class FootstepEngine {
 		if (f.through != null) {
 			playOne(mc, level, p, f.through, StepTracker.isSneak(ev.action()) ? "through_sneak" : "through", Mode.THROUGH, ev.running(), cam, mix, "through");
 		}
+		// 신발(D31) — 발 칸 아이템의 장착 소리 이름 + 행동 · 리팩에 있을 때만(그때 땅 반 · 지나감 · 입장 · 퇴장 끔 — 기본 섞기)
+		String shoe = footwear(p, ev.action());
+		if (shoe != null) {
+			playNamed(mc, level, p, shoe, cam, mix, "footwear", f.ground, ev.action() + " · footwear");
+		}
 		// 섞기 줄의 더하기(D22 · D30) — `<이름>.<행동>` 을 더 튼다(젖음 등) · 리팩에 있을 때만
 		for (String add : mix.add()) {
 			playNamed(mc, level, p, add + "." + ev.action(), cam, mix, "*", f.ground, ev.action());
@@ -290,15 +359,45 @@ public final class FootstepEngine {
 	}
 
 	/** 그 걸음의 섞기 결과 — 섞기 줄이 없으면 바로 빈 결과. */
-	private static MixResult mixFor(ClientLevel level, Player p, Map<String, BlockState> spots, String action, boolean sneaking, BlockPos at) {
+	private static MixResult mixFor(ClientLevel level, LivingEntity p, Map<String, BlockState> spots, String action, boolean sneaking, BlockPos at) {
 		SoundRules rules = Rules.snapshot().sound;
-		if (rules.mix().isEmpty()) {
+		if (rules.mix().isEmpty() && !curMob && footwear(p, action) == null) {
 			return SoundRules.NO_MIX;
 		}
 		Map<String, StateView> views = new java.util.HashMap<>();
 		spots.forEach((k, v) -> views.put(k, McWorldProbe.view(v)));
-		String type = BuiltInRegistries.ENTITY_TYPE.getKey(p.getType()).toString();
-		return rules.mix(new SoundRules.MixContext(views, type, action, sneaking, false, new McWorldProbe(level), at.getX(), at.getY(), at.getZ()));
+		// 위치 · 날씨 조건의 기준은 발 칸(땅 위 칸) — 땅 블록 자리는 하늘이 안 보인다
+		BlockPos feet = at.above();
+		return rules.mix(new SoundRules.MixContext(views, typeId(p), action, sneaking, footwear(p, action) != null, new McWorldProbe(level), feet.getX(),
+				feet.getY(), feet.getZ(), curMob));
+	}
+
+	/**
+	 * 신발 소리 이름(D19 · D31) — 발 칸 아이템 `equippable` 의 장착 소리 이름 + `.<행동>`(행동 부모를 따라) · 없으면 그 이름을 종류로 등록한 부모 종류.
+	 * 리팩에 없으면 null — 신발 소리 · 땅 반은 이름이 있을 때만.
+	 */
+	static String footwear(LivingEntity p, String action) {
+		net.minecraft.world.item.ItemStack feet = p.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.FEET);
+		if (feet.isEmpty()) {
+			return null;
+		}
+		net.minecraft.world.item.equipment.Equippable eq = feet.get(net.minecraft.core.component.DataComponents.EQUIPPABLE);
+		if (eq == null) {
+			return null;
+		}
+		String id = eq.equipSound().unwrapKey().map(k -> k.location().toString()).orElse(null);
+		if (id == null) {
+			return null;
+		}
+		Rules.Snapshot snap = Rules.snapshot();
+		java.util.Set<String> seen = new java.util.HashSet<>();
+		for (String a = action; a != null && !a.isEmpty() && seen.add(a); a = StepTracker.PARENTS_WALK.get(a)) {
+			if (named(id + "." + a)) {
+				return id + "." + a;
+			}
+		}
+		kr.asmbl.block_custom_rules.sound.SoundCategories.Category k = snap.categories.get(id);
+		return k == null || k.parent() == null ? null : snap.categories.find(k.parent(), action, StepTracker.PARENTS_WALK, FootstepEngine::named);
 	}
 
 	/** 그 블록의 소리 종류 — 규칙의 종류 · 없으면 바닐라 걸음 소리의 가운데 이름(`minecraft:<가운데>`) · 빈 소리면 null. */
@@ -322,7 +421,7 @@ public final class FootstepEngine {
 	}
 
 	/** 소리 하나 — 종류 › 행동 › 부모 › 끝내 없으면 바닐라 걸음(웅크림 · 지나감 · 입장 · 퇴장은 무음). 섞기 채널 배율 · 지연을 곱한다. */
-	private static void playOne(Minecraft mc, ClientLevel level, Player p, BlockState state, String action, Mode mode, boolean running, Vec3 cam,
+	private static void playOne(Minecraft mc, ClientLevel level, LivingEntity p, BlockState state, String action, Mode mode, boolean running, Vec3 cam,
 			MixResult mix, String channel) {
 		if (mix.volume(channel) <= 0.0F) {
 			return;
@@ -341,7 +440,8 @@ public final class FootstepEngine {
 		SoundType t = state.getSoundType();
 		String note = action + (mode == Mode.MUFFLED ? " · muffled" : "");
 		if (name == null) {
-			if (mode == Mode.THROUGH || StepTracker.isSneak(action)) {
+			// 웅크림 · 지나감 · 입장 · 퇴장 · 정지는 리팩에 이름이 있을 때만(바닐라에 없는 소리)
+			if (mode == Mode.THROUGH || StepTracker.isSneak(action) || action.startsWith("stand")) {
 				return;
 			}
 			SoundEvent ev = t.getStepSound();
@@ -365,7 +465,7 @@ public final class FootstepEngine {
 	}
 
 	/** 바닐라답게 — 종류 음량 × 0.15(먹먹 0.05 · 높낮이 0.8) · `wander` 반 · 섞기 배율. */
-	private static void vanillaPlay(Minecraft mc, ClientLevel level, Player p, SoundEvent ev, SoundType t, Mode mode, String action, Vec3 cam,
+	private static void vanillaPlay(Minecraft mc, ClientLevel level, LivingEntity p, SoundEvent ev, SoundType t, Mode mode, String action, Vec3 cam,
 			MixResult mix, String channel, BlockState state, String note) {
 		float vol = t.getVolume() * (mode == Mode.MUFFLED ? 0.05F : 0.15F) * StepTracker.vanillaFactor(action) * mix.volume(channel);
 		float pitch = t.getPitch() * (mode == Mode.MUFFLED ? 0.8F : 1.0F) * mix.pitch(channel);
@@ -373,7 +473,7 @@ public final class FootstepEngine {
 	}
 
 	/** 섞기 줄의 더하기 이름 — 겹 소리 · 리팩에 있을 때만 리팩 정의대로. */
-	private static void playNamed(Minecraft mc, ClientLevel level, Player p, String name, Vec3 cam, MixResult mix, String channel, BlockState state,
+	private static void playNamed(Minecraft mc, ClientLevel level, LivingEntity p, String name, Vec3 cam, MixResult mix, String channel, BlockState state,
 			String action) {
 		SoundRules rules = Rules.snapshot().sound;
 		if (!named(name)) {
@@ -386,7 +486,7 @@ public final class FootstepEngine {
 	}
 
 	/** 자수정 종소리(바닐라 식 · 20틱마다 · 세기 × 0.997^틱 + 0.07). 종류를 바꿨으면 `<종류>.chime` · 없으면 바닐라. */
-	private static void chime(Minecraft mc, ClientLevel level, Player p, Tracked t, BlockState ground, Vec3 cam, MixResult mix) {
+	private static void chime(Minecraft mc, ClientLevel level, LivingEntity p, Tracked t, BlockState ground, Vec3 cam, MixResult mix) {
 		if (p.tickCount < t.lastChimeTick + 20 || mix.volume("chime") <= 0.0F) {
 			return;
 		}
@@ -407,7 +507,7 @@ public final class FootstepEngine {
 	}
 
 	/** 튼다 — 섞기 · 겹 소리 지연 + 카메라에서 10칸 넘으면 ⌊거리 / 2⌋ 틱(D34). 지연 줄에는 소리 재료만 든다. */
-	private static void emit(Minecraft mc, ClientLevel level, Player p, SoundEvent ev, float vol, float pitch, int delayMs, Vec3 cam, BlockState block,
+	private static void emit(Minecraft mc, ClientLevel level, LivingEntity p, SoundEvent ev, float vol, float pitch, int delayMs, Vec3 cam, BlockState block,
 			String action) {
 		if (vol <= 0.0F) {
 			return;
@@ -417,7 +517,7 @@ public final class FootstepEngine {
 			SoundDebugger.record(SoundDebugger.Origin.ENGINE, p.getX(), p.getY(), p.getZ(), ev.location().toString(), null, action,
 					SoundHub.describe(block) + (cat == null ? "" : " (" + cat + ")"), false);
 		}
-		SimpleSoundInstance si = new SimpleSoundInstance(ev, SoundSource.PLAYERS, Math.min(vol, VOLUME_CAP), pitch,
+		SimpleSoundInstance si = new SimpleSoundInstance(ev, curSource, Math.min(vol, VOLUME_CAP), pitch / curSize,
 				RandomSource.create(level.random.nextLong()), p.getX(), p.getY(), p.getZ());
 		double dist = Math.sqrt(p.distanceToSqr(cam));
 		long delay = Math.max(0, delayMs) * 1_000_000L;
@@ -439,8 +539,11 @@ public final class FootstepEngine {
 	 */
 	public static boolean blocksPacket(ClientLevel level, double x, double y, double z, String id, SoundSource source, float vol, float pitch,
 			long seed) {
-		if (HANDLED.isEmpty() || source != SoundSource.PLAYERS || SoundNames.isMarkerSeed(seed)) {
+		if (HANDLED.isEmpty() || SoundNames.isMarkerSeed(seed)) {
 			return false;
+		}
+		if (source != SoundSource.PLAYERS) {
+			return blocksMobPacket(level, x, y, z, id, source);
 		}
 		boolean chime = CHIME.equals(id);
 		if (!chime && !id.endsWith(".step")) {
@@ -472,6 +575,23 @@ public final class FootstepEngine {
 						return true;
 					}
 				}
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * 몹 걸음 패킷 — 1칸 안에 이 엔진이 맡는 몹(같은 출처)이 있고 이름이 걸음 무리(`.step` · 말 `gallop` · `breathe` · 종소리)면 막는다.
+	 * 몹 걸음 음량은 몹마다 달라(0.15 ~ 10) 식으로 견주지 않는다.
+	 */
+	private static boolean blocksMobPacket(ClientLevel level, double x, double y, double z, String id, SoundSource source) {
+		if (!(id.contains(".step") || id.endsWith(".gallop") || id.endsWith("horse.breathe") || CHIME.equals(id))) {
+			return false;
+		}
+		for (Entity e : level.getEntities((Entity) null, new net.minecraft.world.phys.AABB(x - 1.0, y - 1.0, z - 1.0, x + 1.0, y + 1.0, z + 1.0),
+				e -> e instanceof LivingEntity && !(e instanceof Player))) {
+			if (HANDLED.contains(e.getId()) && e.getSoundSource() == source) {
+				return true;
 			}
 		}
 		return false;

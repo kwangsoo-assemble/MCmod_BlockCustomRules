@@ -49,16 +49,44 @@ public final class StepTracker {
 		return Map.copyOf(m);
 	}
 
-	/** 한 틱의 재료. */
+	/**
+	 * 한 틱의 재료.
+	 *
+	 * @param stride    몹 고유 간격(바닐라 `nextStep` — 보통 1 · 거북 0.15 · 스트라이더 0.6 · 워든 0.55) — 0.95 를 곱한다
+	 * @param quadruped 네 발(PF 3박 · 같은 틱 한 발 더 — `entities` 규칙 `locomotion: quadruped` 일 때만)
+	 * @param size      크기 배율 f = (배율 − 1) × 0.6 + 1 — 간격에 곱한다(`size_scaling` 일 때만 · 아니면 1)
+	 */
 	public record Input(double x, double y, double z, boolean onGround, boolean climbing, boolean sprinting, boolean sneaking, boolean crawling,
-			boolean local) {
+			boolean local, double stride, boolean quadruped, double size) {
+		public Input(double x, double y, double z, boolean onGround, boolean climbing, boolean sprinting, boolean sneaking, boolean crawling, boolean local) {
+			this(x, y, z, onGround, climbing, sprinting, sneaking, crawling, local, 1.0, false, 1.0);
+		}
+	}
+
+	/** 크기 배율(D25) — 엔티티 배율 s → (s − 1) × 0.6 + 1. 간격에 곱하고 높낮이는 이것으로 나눈다. */
+	public static double sizeFactor(double scale) {
+		return (scale - 1.0) * 0.6 + 1.0;
 	}
 
 	/** 낼 소리 — 행동(웅크림 붙은 이름) · 발 수(1 = 다음 발 · 2 = 두 발 같이) · 달리는 중(부모 고르기) · 발밑을 잡을 높이(점프는 뛰기 직전 높이). */
 	public record Event(String action, int feet, boolean running, double y) {
 	}
 
+	private final java.util.function.DoubleSupplier rnd;
 	private boolean init;
+	/** 네 발 박자 — 발굽 차례(0 ~ 2) · 다음 걸음 거리 배율 씨앗. */
+	private int hoof;
+	private double hoofSeed = 0.05;
+	/** 정지(stand) — 멈춘 채 남은 틱(0.5 ~ 3초 무작위). */
+	private int standTicks = -1;
+
+	public StepTracker() {
+		this(Math::random);
+	}
+
+	public StepTracker(java.util.function.DoubleSupplier rnd) {
+		this.rnd = rnd;
+	}
 	private double lx;
 	private double ly;
 	private double lz;
@@ -138,9 +166,20 @@ public final class StepTracker {
 			this.stepY = in.y;
 		} else {
 			boolean up = !onLadder && rise > STAIR_HEIGHT;
-			double interval = onLadder ? LADDER : up ? STAIR : STRIDE;
+			String action = up ? "stairs_up" : base(in, onLadder);
+			double interval = (onLadder ? LADDER : up ? STAIR : STRIDE * in.stride) * in.size;
+			if (in.quadruped && !onLadder && !up) {
+				interval = quadInterval(interval, action);
+			}
 			if (this.acc >= interval) {
-				out.add(new Event((up ? "stairs_up" : base(in, onLadder)) + sneak, 1, in.sprinting, in.y));
+				out.add(new Event(action + sneak, 1, in.sprinting, in.y));
+				if (in.quadruped && action.equals("step")) {
+					stepped();
+					// 네 발 — 걷기면 같은 틱에 한 발 더(PF)
+					out.add(new Event(action + sneak, 1, in.sprinting, in.y));
+				} else if (in.quadruped) {
+					stepped();
+				}
 				// 넘친 거리는 다음 걸음으로 넘긴다(평균 간격이 0.95 가 되게) · 순간 이동처럼 크게 넘치면 버린다
 				this.acc -= interval;
 				if (this.acc >= interval) {
@@ -157,11 +196,39 @@ public final class StepTracker {
 				}
 				this.acc = 0.0;
 				this.stepY = in.y;
+				this.standTicks = standDelay();
+			} else if (this.still > STILL_TICKS && --this.standTicks <= 0) {
+				// 정지(D26) — 멈춘 채 0.5 ~ 3초마다 · 리팩에 그 이름이 있을 때만 난다(엔진이 가른다)
+				out.add(new Event("stand" + sneak, 1, in.sprinting, in.y));
+				this.standTicks = standDelay();
 			}
 		} else {
 			this.still = 0;
 		}
 		return out;
+	}
+
+	private int standDelay() {
+		return 10 + (int) (this.rnd.getAsDouble() * 50);
+	}
+
+	/** PF 네 발 박자(QuadrupedModifier) — 걷기: 세 걸음 주기 · 가운데 걸음만 짧게 · 달리기: 첫 걸음 × 0.8 · 나머지 × 0.3. */
+	private double quadInterval(double d, String action) {
+		if (action.equals("run")) {
+			return d * (this.hoof == 0 ? 0.8 : 0.3);
+		}
+		if (!action.equals("step")) {
+			return d;
+		}
+		double pond = this.hoofSeed * this.hoofSeed * 0.2;
+		return this.hoof == 1 ? d * pond * 0.925 : d * (1.0 - pond) * 0.925;
+	}
+
+	private void stepped() {
+		if (this.hoof == 0 || this.hoof == 2) {
+			this.hoofSeed = this.rnd.getAsDouble();
+		}
+		this.hoof = (this.hoof + 1) % 3;
 	}
 
 	private static String base(Input in, boolean onLadder) {

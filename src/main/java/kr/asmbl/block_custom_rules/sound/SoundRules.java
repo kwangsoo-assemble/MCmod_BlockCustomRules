@@ -64,7 +64,11 @@ public final class SoundRules {
 
 	/** 섞기 재료 — 그 걸음의 자리별 블록 · 엔티티 · 행동 · 월드. */
 	public record MixContext(Map<String, StateView> blocks, String entity, String action, boolean sneak, boolean footwear, WorldProbe world, int x, int y,
-			int z) {
+			int z, boolean mob) {
+		public MixContext(Map<String, StateView> blocks, String entity, String action, boolean sneak, boolean footwear, WorldProbe world, int x, int y,
+				int z) {
+			this(blocks, entity, action, sneak, footwear, world, x, y, z, false);
+		}
 	}
 
 	/** 섞기 결과 — 채널별 배율 · 지연 · 더할 이름. */
@@ -88,6 +92,10 @@ public final class SoundRules {
 	/** 모드 안 기본 섞기(D22) — 신발이면 땅 반 · 지나감 · 입장 · 퇴장 끔. 리팩 줄이 덮는다. */
 	static final MixLine DEFAULT_FOOTWEAR = new MixLine(Map.of(), null, null, null, null, true,
 			Map.of("ground", 0.5F, "through", 0.0F, "enter", 0.0F, "exit", 0.0F), Map.of(), Map.of(), List.of(), 0);
+
+	/** 모드 안 기본 섞기(D22) — 몹은 바닐라 몹 걸음(`mob`) 그대로 · 블록 걸음 · 겹침 위 · 아래 · 덧소리는 끔. 리팩 줄이 덮는다. */
+	static final Map<String, Float> DEFAULT_MOB = Map.of("mob", 1.0F, "ground", 0.0F, "top", 0.0F, "bottom", 0.0F, "through", 0.0F, "enter", 0.0F,
+			"exit", 0.0F);
 
 	public final Range volume;
 	public final Range pitch;
@@ -169,10 +177,13 @@ public final class SoundRules {
 		Map<String, Float> p = new LinkedHashMap<>();
 		Map<String, Integer> d = new LinkedHashMap<>();
 		Set<String> add = new LinkedHashSet<>();
+		if (c.mob) {
+			v.putAll(DEFAULT_MOB);
+		}
 		if (c.footwear) {
 			v.putAll(DEFAULT_FOOTWEAR.volume);
 		}
-		boolean any = c.footwear;
+		boolean any = c.footwear || c.mob;
 		for (MixLine l : this.mix) {
 			if (!matches(l, c)) {
 				continue;

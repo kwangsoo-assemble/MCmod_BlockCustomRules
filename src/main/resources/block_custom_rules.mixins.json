@@ -20,7 +20,8 @@
 		"SodiumBlockRendererMixin",
 		"SodiumOcclusionMixin",
 		"TrapDoorTypeAccess",
-		"WoodTypeAccess"
+		"WoodTypeAccess",
+		"EntityStepAccess"
 	],
 	"injectors": {
 		"defaultRequire": 0
