@@ -2,8 +2,11 @@ package kr.asmbl.block_custom_rules;
 
 import com.mojang.logging.LogUtils;
 import kr.asmbl.block_custom_rules.command.BcrCommand;
+import kr.asmbl.block_custom_rules.debug.SoundDebugger;
 import kr.asmbl.block_custom_rules.step.FootstepEngine;
+import kr.asmbl.block_custom_rules.track.EntityTracker;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 import kr.asmbl.block_custom_rules.config.OptionsFile;
 import kr.asmbl.block_custom_rules.sway.SwayEngine;
 import kr.asmbl.block_custom_rules.world.Generation;
@@ -16,11 +19,16 @@ public final class BcrClient implements ClientModInitializer {
 		// 리팩 규칙은 첫 리소스 리로드에서 읽는다 — 그 전에 모드 옵션이 있어야 한다
 		OptionsFile.load();
 		WorldHooks.register();
+		Generation.onReset(EntityTracker::reset);
 		Generation.onReset(SwayEngine::reset);
 		Generation.onReset(FootstepEngine::reset);
+		Generation.onReset(SoundDebugger::reset);
 		Generation.onEntityGone(FootstepEngine::entityGone);
 		FootstepEngine.DELAYED.errorSink((what, t) -> LogUtils.getLogger().warn("[block_custom_rules] 지연 소리 예외({}) — 그 소리만 버렸다", what, t));
+		// 추적기가 먼저 — 엔진 · 휘기가 그 목록을 쓴다
+		ClientTickEvents.END_CLIENT_TICK.register(EntityTracker::tick);
 		ClientTickEvents.END_CLIENT_TICK.register(FootstepEngine::tick);
+		WorldRenderEvents.AFTER_ENTITIES.register(SoundDebugger::render);
 		BcrCommand.register();
 	}
 }

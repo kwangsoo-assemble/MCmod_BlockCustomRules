@@ -10,10 +10,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import kr.asmbl.block_custom_rules.config.Rules;
+import kr.asmbl.block_custom_rules.debug.SoundDebugger;
 import kr.asmbl.block_custom_rules.rules.Resolved;
 import kr.asmbl.block_custom_rules.sound.SoundDecision;
 import kr.asmbl.block_custom_rules.sound.SoundHub;
 import kr.asmbl.block_custom_rules.sound.SoundNames;
+import kr.asmbl.block_custom_rules.track.EntityTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.AbstractClientPlayer;
@@ -107,11 +109,11 @@ public final class FootstepEngine {
 		try {
 			Vec3 cam = mc.gameRenderer.getMainCamera().getPosition();
 			List<AbstractClientPlayer> near = new ArrayList<>();
-			for (AbstractClientPlayer p : level.players()) {
-				if (p.distanceToSqr(cam) <= RANGE * RANGE) {
+			EntityTracker.forEach(level, e -> {
+				if (e instanceof AbstractClientPlayer p && p.distanceToSqr(cam) <= RANGE * RANGE) {
 					near.add(p);
 				}
-			}
+			});
 			near.sort(Comparator.comparingDouble(p -> p.distanceToSqr(cam)));
 			IntOpenHashSet live = new IntOpenHashSet();
 			int n = 0;
@@ -308,7 +310,7 @@ public final class FootstepEngine {
 			vol = mode == Mode.MUFFLED ? 1.0F / 3.0F : 1.0F;
 			pitch = mode == Mode.MUFFLED ? 0.8F : 1.0F;
 		}
-		emit(mc, level, p, ev, vol, pitch, cam);
+		emit(mc, level, p, ev, vol, pitch, cam, state, action + (mode == Mode.MUFFLED ? " · muffled" : ""));
 	}
 
 	/** 자수정 종소리(바닐라 식 · 20틱마다 · 세기 × 0.997^틱 + 0.07). 종류를 바꿨으면 `<종류>.chime` · 없으면 바닐라. */
@@ -324,11 +326,16 @@ public final class FootstepEngine {
 		SoundEvent ev = name == null ? SoundEvents.AMETHYST_BLOCK_CHIME : SoundHub.event(name);
 		float vol = vanilla ? 0.1F + t.chime * 1.2F : 1.0F;
 		float pitch = vanilla ? 0.5F + t.chime * level.random.nextFloat() * 1.2F : 1.0F;
-		emit(mc, level, p, ev, vol, pitch, cam);
+		emit(mc, level, p, ev, vol, pitch, cam, ground, "chime");
 	}
 
 	/** 튼다 — 카메라에서 10칸 넘으면 ⌊거리 / 2⌋ 틱 늦게(D34). 지연 줄에는 소리 재료만 든다. */
-	private static void emit(Minecraft mc, ClientLevel level, Player p, SoundEvent ev, float vol, float pitch, Vec3 cam) {
+	private static void emit(Minecraft mc, ClientLevel level, Player p, SoundEvent ev, float vol, float pitch, Vec3 cam, BlockState block, String action) {
+		if (SoundDebugger.active()) {
+			String cat = category(block);
+			SoundDebugger.record(SoundDebugger.Origin.ENGINE, p.getX(), p.getY(), p.getZ(), ev.location().toString(), null, action,
+					SoundHub.describe(block) + (cat == null ? "" : " (" + cat + ")"), false);
+		}
 		SimpleSoundInstance si = new SimpleSoundInstance(ev, SoundSource.PLAYERS, Math.min(vol, VOLUME_CAP), pitch,
 				RandomSource.create(level.random.nextLong()), p.getX(), p.getY(), p.getZ());
 		double dist = Math.sqrt(p.distanceToSqr(cam));

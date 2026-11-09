@@ -23,7 +23,8 @@ public abstract class HitSoundMixin {
 	private SimpleSoundInstance bcr$hit(SoundEvent event, SoundSource source, float volume, float pitch, RandomSource random, BlockPos pos,
 			Operation<SimpleSoundInstance> original) {
 		Minecraft mc = Minecraft.getInstance();
-		SoundHub.Replacement r = mc.level == null ? null : SoundHub.onHeld(mc.level.getBlockState(pos), event, source, volume, pitch);
+		SoundHub.Replacement r = mc.level == null ? null : SoundHub.onHeld(mc.level.getBlockState(pos), event, source, volume, pitch,
+				pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
 		if (r == null) {
 			return original.call(event, source, volume, pitch, random, pos);
 		}

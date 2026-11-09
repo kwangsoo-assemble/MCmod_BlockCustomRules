@@ -28,6 +28,8 @@ dependencies {
 	modImplementation fabricApi.module("fabric-lifecycle-events-v1", project.fabric_api_version)
 	// 리팩 규칙 파일 다시 읽기(D11)
 	modImplementation fabricApi.module("fabric-resource-loader-v0", project.fabric_api_version)
+	// 소리 디버거 글자를 월드에 그리기(D37 · D43 — 엔티티를 소환하지 않는다)
+	modImplementation fabricApi.module("fabric-rendering-v1", project.fabric_api_version)
 	// Sodium 사각면(QuadEmitter)을 받는 데만 — Sodium 이 쓰는 렌더러 API 라 Sodium 이 있을 때만 읽힌다
 	modCompileOnly fabricApi.module("fabric-renderer-api-v1", project.fabric_api_version)
 	modCompileOnly "com.terraformersmc:modmenu:${project.modmenu_version}"

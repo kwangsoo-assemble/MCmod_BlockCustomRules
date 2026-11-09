@@ -4,12 +4,14 @@ import com.mojang.logging.LogUtils;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import kr.asmbl.block_custom_rules.config.Rules;
+import kr.asmbl.block_custom_rules.debug.SoundDebugger;
 import kr.asmbl.block_custom_rules.rules.Resolved;
 import kr.asmbl.block_custom_rules.step.FootstepEngine;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundSource;
@@ -37,10 +39,41 @@ public final class SoundHub {
 	/** 막는다 — 이 엔진이 내는 남의 걸음 패킷(D33). */
 	public static final Replacement CANCEL = new Replacement(null, 0.0F, 0.0F, "blocked footstep packet");
 
+	/** 디버거용 — 블록 설명 · 안 바꾼 까닭(켜져 있을 때만 만든다). */
+	private static final class Trace {
+		String block;
+		String reason = "no_rules";
+	}
+
 	/** 위치 소리 · 서버 패킷 — 바꿀 게 없으면 null · 막으면 {@link #CANCEL}. */
 	public static Replacement onPlay(ClientLevel level, double x, double y, double z, SoundEvent ev, SoundSource source, float volume, float pitch, long seed) {
 		String id = ev.location().toString();
-		if (HeldBlock.inPacket()) {
+		boolean packet = HeldBlock.inPacket();
+		Trace tr = SoundDebugger.active() ? new Trace() : null;
+		Replacement r = play(level, x, y, z, id, source, volume, pitch, seed, packet, tr);
+		if (tr != null) {
+			trace(packet ? SoundDebugger.Origin.PACKET : SoundDebugger.Origin.CLIENT, x, y, z, id, r, tr);
+		}
+		return r;
+	}
+
+	private static void trace(SoundDebugger.Origin origin, double x, double y, double z, String id, Replacement r, Trace tr) {
+		try {
+			if (r == CANCEL) {
+				SoundDebugger.record(origin, x, y, z, id, null, null, tr.block, true);
+			} else if (r != null) {
+				SoundDebugger.record(origin, x, y, z, r.event().location().toString(), id, null, tr.block, false);
+			} else {
+				SoundDebugger.record(origin, x, y, z, id, null, Component.translatable("bcr.debug.reason." + tr.reason).getString(), tr.block, false);
+			}
+		} catch (RuntimeException | LinkageError e) {
+			warnOnce(e);
+		}
+	}
+
+	private static Replacement play(ClientLevel level, double x, double y, double z, String id, SoundSource source, float volume, float pitch, long seed,
+			boolean packet, Trace tr) {
+		if (packet) {
 			try {
 				if (FootstepEngine.blocksPacket(level, x, y, z, id, source, volume, pitch, seed)) {
 					return CANCEL;
@@ -55,11 +88,13 @@ public final class SoundHub {
 		}
 		String[] parts = SoundNames.split(id);
 		if (parts == null) {
+			if (tr != null) {
+				tr.reason = "not_block_sound";
+			}
 			return null;
 		}
 		try {
 			Minecraft mc = Minecraft.getInstance();
-			boolean packet = HeldBlock.inPacket();
 			BlockState held = HeldBlock.get();
 			BlockState state;
 			boolean owner;
@@ -72,15 +107,21 @@ public final class SoundHub {
 			} else {
 				BlockPos pos = BlockPos.containing(x, y, z);
 				if (!level.hasChunkAt(pos)) {
+					if (tr != null) {
+						tr.reason = "unloaded";
+					}
 					return null;
 				}
 				state = level.getBlockState(pos);
 				owner = SoundOwners.owns(state, id);
 			}
 			if (state == null) {
+				if (tr != null) {
+					tr.reason = "no_foot_block";
+				}
 				return null;
 			}
-			return decide(snap, level == mc.level, state, owner, id, source, packet, seed, volume, pitch);
+			return decide(snap, level == mc.level, state, owner, id, source, packet, seed, volume, pitch, tr);
 		} catch (RuntimeException | LinkageError e) {
 			warnOnce(e);
 			return null;
@@ -88,25 +129,34 @@ public final class SoundHub {
 	}
 
 	/** 블록을 들고 직접 트는 소리(때리기 — `SoundManager` 로 바로 간다). */
-	public static Replacement onHeld(BlockState state, SoundEvent ev, SoundSource source, float volume, float pitch) {
+	public static Replacement onHeld(BlockState state, SoundEvent ev, SoundSource source, float volume, float pitch, double x, double y, double z) {
 		Rules.Snapshot snap = Rules.snapshot();
-		if (!snap.anySoundCategory || SoundNames.split(ev.location().toString()) == null) {
-			return null;
+		String id = ev.location().toString();
+		Trace tr = SoundDebugger.active() ? new Trace() : null;
+		Replacement r = null;
+		if (snap.anySoundCategory && SoundNames.split(id) != null) {
+			try {
+				r = decide(snap, true, state, true, id, source, false, 0L, volume, pitch, tr);
+			} catch (RuntimeException | LinkageError e) {
+				warnOnce(e);
+			}
 		}
-		try {
-			return decide(snap, true, state, true, ev.location().toString(), source, false, 0L, volume, pitch);
-		} catch (RuntimeException | LinkageError e) {
-			warnOnce(e);
-			return null;
+		if (tr != null) {
+			trace(SoundDebugger.Origin.CLIENT, x, y, z, id, r, tr);
 		}
+		return r;
 	}
 
 	private static Replacement decide(Rules.Snapshot snap, boolean sameWorld, BlockState state, boolean owner, String id, SoundSource source,
-			boolean packet, long seed, float volume, float pitch) {
+			boolean packet, long seed, float volume, float pitch, Trace tr) {
 		Resolved r = snap.get(state);
 		String cat = r == null ? null : r.soundCategory();
 		SoundDecision.Result res = SoundDecision.decide(id, source.getName(), packet, seed, sameWorld, cat, owner, snap.categories,
 				SoundHub::defined, SoundHub::registered);
+		if (tr != null) {
+			tr.block = describe(state) + (cat == null ? "" : " (" + cat + ")");
+			tr.reason = res.reason().replace(' ', '_');
+		}
 		if (!res.replaces()) {
 			return null;
 		}
@@ -150,6 +200,11 @@ public final class SoundHub {
 			ResourceLocation rl = ResourceLocation.parse(n);
 			return BuiltInRegistries.SOUND_EVENT.containsKey(rl) ? BuiltInRegistries.SOUND_EVENT.getValue(rl) : SoundEvent.createVariableRangeEvent(rl);
 		});
+	}
+
+	/** 디버거 · 명령용 블록 이름. */
+	public static String describe(BlockState s) {
+		return BuiltInRegistries.BLOCK.getKey(s.getBlock()).toString();
 	}
 
 	private static void warnOnce(Throwable e) {

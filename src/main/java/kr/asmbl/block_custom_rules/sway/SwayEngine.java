@@ -3,6 +3,7 @@ package kr.asmbl.block_custom_rules.sway;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -10,6 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import kr.asmbl.block_custom_rules.config.OptionsFile;
 import kr.asmbl.block_custom_rules.config.Rules;
 import kr.asmbl.block_custom_rules.rules.Resolved;
+import kr.asmbl.block_custom_rules.track.EntityTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
@@ -149,11 +151,19 @@ public final class SwayEngine {
 		}
 	}
 
-	/** 엔티티마다 히트박스가 걸친 칸 → 미는 벡터를 기둥(아래 칸) 자리마다 더한다. */
+	/**
+	 * 엔티티마다 히트박스가 걸친 칸 → 미는 벡터를 기둥(아래 칸) 자리마다 더한다.
+	 * 엔티티는 추적기(틱마다 카메라 16칸)에서 받아 카메라 8칸 상자에 걸친 것만 — 관전자 · 히트박스 폭 0(표지 · 디스플레이)은 안 민다(D36).
+	 */
 	private static void collect(ClientLevel level, Vec3 cam) {
 		SUMS.clear();
 		AABB around = new AABB(cam, cam).inflate(RANGE);
-		List<Entity> entities = level.getEntities((Entity) null, around, e -> e.isAlive() && !e.isSpectator());
+		List<Entity> entities = new ArrayList<>();
+		EntityTracker.forEach(level, e -> {
+			if (!e.isSpectator() && e.getBbWidth() > 0.0F && e.getBoundingBox().intersects(around)) {
+				entities.add(e);
+			}
+		});
 		for (Entity e : entities) {
 			AABB box = e.getBoundingBox().inflate(SwayMath.TOUCH_MARGIN, 0.0, SwayMath.TOUCH_MARGIN);
 			SEEN.clear();
