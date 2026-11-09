@@ -167,12 +167,12 @@ public final class BrrConfig {
 		}
 	}
 
-	/** 옛 설정 파일이 없을 때의 기본 — Cull Pass 1.0 · SWAY 포크 기본값을 합친 것. */
+	/** 옛 설정 파일도 없을 때의 기본. */
 	static Map<String, Rule> defaults() {
 		Map<String, Rule> m = new LinkedHashMap<>();
 		m.put("minecraft:petrified_oak_slab", new Rule(Render.DEFAULT, true, 0.0F));
 		m.put("minecraft:cobweb", new Rule(Render.DEFAULT, false, 1.0F));
-		m.put("minecraft:heavy_weighted_pressure_plate", new Rule(Render.DEFAULT, false, 1.0F));
+		m.put("minecraft:heavy_weighted_pressure_plate", new Rule(Render.DEFAULT, false, 1.5F));
 		return Collections.unmodifiableMap(m);
 	}
 
