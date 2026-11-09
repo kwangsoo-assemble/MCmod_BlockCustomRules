@@ -1,13 +1,19 @@
 package kr.asmbl.block_custom_rules;
 
 import kr.asmbl.block_custom_rules.command.BcrCommand;
-import kr.asmbl.block_custom_rules.config.BcrConfig;
+import kr.asmbl.block_custom_rules.config.OptionsFile;
+import kr.asmbl.block_custom_rules.sway.SwayEngine;
+import kr.asmbl.block_custom_rules.world.Generation;
+import kr.asmbl.block_custom_rules.world.WorldHooks;
 import net.fabricmc.api.ClientModInitializer;
 
 public final class BcrClient implements ClientModInitializer {
 	@Override
 	public void onInitializeClient() {
-		BcrConfig.load();
+		// 리팩 규칙은 첫 리소스 리로드에서 읽는다 — 그 전에 모드 옵션이 있어야 한다
+		OptionsFile.load();
+		WorldHooks.register();
+		Generation.onReset(SwayEngine::reset);
 		BcrCommand.register();
 	}
 }

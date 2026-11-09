@@ -28,7 +28,7 @@ public final class Resolver {
 		Groups groups = new Groups(catalog, problems, defs);
 		for (RuleFile f : files) {
 			for (TagRef ref : f.tagRefs) {
-				if (catalog.ready(ref.registry()) && groups.members(ref.registry(), ref.tag(), ref.origin().layer()) == null) {
+				if (catalog.tagsReady(ref.registry()) && groups.members(ref.registry(), ref.tag(), ref.origin().layer()) == null) {
 					problems.warn(ref.origin(), ref.path(), "bcr.problem.unknown_tag", "#" + ref.tag());
 				}
 			}

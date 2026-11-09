@@ -269,7 +269,7 @@ public final class CondParser {
 
 	/** 없는 블록 · 그 블록에 없는 속성 · 값 — 경고만(줄은 쓴다 · 안 맞을 뿐). */
 	private void checkBlocks(Set<String> ids, Map<String, ValueMatch> state, String path) {
-		if (!this.catalog.ready(Registry.BLOCK)) {
+		if (!this.catalog.idsReady(Registry.BLOCK)) {
 			return;
 		}
 		for (String id : ids) {
@@ -308,7 +308,7 @@ public final class CondParser {
 				tagRefs.add(new TagRef(Registry.ENTITY_TYPE, id, origin, path));
 				return new EntityMatch(null, id);
 			}
-			if (catalog.ready(Registry.ENTITY_TYPE) && !catalog.exists(Registry.ENTITY_TYPE, id)) {
+			if (catalog.idsReady(Registry.ENTITY_TYPE) && !catalog.exists(Registry.ENTITY_TYPE, id)) {
 				problems.warn(origin, path, "bcr.problem.unknown_entity", id);
 			}
 			return new EntityMatch(Set.of(id), null);

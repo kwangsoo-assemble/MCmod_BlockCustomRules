@@ -2,9 +2,10 @@ package kr.asmbl.block_custom_rules.mixin;
 
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
-import kr.asmbl.block_custom_rules.config.BcrConfig;
+import kr.asmbl.block_custom_rules.config.Rules;
 import kr.asmbl.block_custom_rules.config.Render;
-import kr.asmbl.block_custom_rules.config.Rule;
+import kr.asmbl.block_custom_rules.rules.Resolved;
+import org.spongepowered.asm.mixin.Unique;
 import net.minecraft.client.renderer.ItemBlockRenderTypes;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.chunk.ChunkSectionLayer;
@@ -21,11 +22,11 @@ import org.spongepowered.asm.mixin.Mixin;
 public abstract class ChunkRenderTypeMixin {
 	@WrapMethod(method = "getChunkRenderType")
 	private static ChunkSectionLayer bcr$chunkLayer(BlockState state, Operation<ChunkSectionLayer> original) {
-		Rule r = BcrConfig.rule(state.getBlock());
-		if (r == null) {
+		Render mode = mode(state);
+		if (mode == null) {
 			return original.call(state);
 		}
-		return switch (r.render()) {
+		return switch (mode) {
 			case SOLID -> ChunkSectionLayer.SOLID;
 			case CUTOUT -> ChunkSectionLayer.CUTOUT;
 			case TRANSLUCENT -> ChunkSectionLayer.TRANSLUCENT;
@@ -35,14 +36,21 @@ public abstract class ChunkRenderTypeMixin {
 
 	@WrapMethod(method = "getMovingBlockRenderType")
 	private static RenderType bcr$movingLayer(BlockState state, Operation<RenderType> original) {
-		Rule r = BcrConfig.rule(state.getBlock());
-		if (r == null || r.render() == Render.DEFAULT) {
+		Render mode = mode(state);
+		if (mode == null || mode == Render.DEFAULT) {
 			return original.call(state);
 		}
-		return switch (r.render()) {
+		return switch (mode) {
 			case SOLID -> RenderType.solid();
 			case CUTOUT -> RenderType.cutout();
 			default -> RenderType.translucentMovingBlock();
 		};
+	}
+
+	/** 규칙의 렌더 칸 · 없으면 null(바닐라 · 셰이더팩 그대로). */
+	@Unique
+	private static Render mode(BlockState state) {
+		Resolved r = Rules.get(state);
+		return r == null ? null : r.render();
 	}
 }

@@ -3,107 +3,100 @@ package kr.asmbl.block_custom_rules.command;
 import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.argument;
 import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.literal;
 
-import com.mojang.brigadier.arguments.FloatArgumentType;
-import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import kr.asmbl.block_custom_rules.config.BcrConfig;
-import kr.asmbl.block_custom_rules.config.Render;
-import kr.asmbl.block_custom_rules.config.Rule;
+import kr.asmbl.block_custom_rules.config.Rules;
+import kr.asmbl.block_custom_rules.game.McState;
+import kr.asmbl.block_custom_rules.rules.Field;
+import kr.asmbl.block_custom_rules.rules.Problems;
+import kr.asmbl.block_custom_rules.rules.Provenance;
+import kr.asmbl.block_custom_rules.rules.Resolved;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
-import net.minecraft.commands.SharedSuggestionProvider;
-import net.minecraft.commands.arguments.ResourceLocationArgument;
+import net.minecraft.client.Minecraft;
+import net.minecraft.commands.arguments.blocks.BlockInput;
+import net.minecraft.commands.arguments.blocks.BlockStateArgument;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
 
 /**
- * 클라 명령 `/bcr` — 게임 안에서 블록 규칙을 빨리 바꾼다. 응답은 친 사람 채팅에만 뜬다(클라 명령 · 일부러 치는 명령).
+ * 클라 명령 `/bcr`(D38) — 응답은 친 사람 채팅에만 뜬다(클라 명령 · 일부러 치는 진단 명령).
+ * `reload` 모드 옵션 다시 읽기(리팩은 F3 + T) · `check` 규칙 문제 · `rule [블록 상태]` 최종 규칙과 출처(없으면 바라보는 블록).
  */
 public final class BcrCommand {
+	/** `check` 가 채팅에 보이는 최대 줄 — 나머지는 로그에. */
+	private static final int CHECK_LINES = 30;
+
 	private BcrCommand() {
 	}
 
 	public static void register() {
 		ClientCommandRegistrationCallback.EVENT.register((dispatcher, ctx) -> dispatcher.register(literal("bcr")
-			.then(literal("list").executes(BcrCommand::list))
-			.then(literal("reload").executes(c -> {
-				if (!BcrConfig.reload()) {
-					c.getSource().sendError(Component.translatable("bcr.cmd.reload_failed"));
-					return 0;
-				}
-				c.getSource().sendFeedback(Component.translatable("bcr.cmd.reloaded", BcrConfig.entries().size()));
-				return 1;
-			}))
-			.then(literal("blend").then(argument("seconds", FloatArgumentType.floatArg(0.0F, 5.0F)).executes(c -> {
-				float s = FloatArgumentType.getFloat(c, "seconds");
-				BcrConfig.apply(BcrConfig.entries(), s);
-				c.getSource().sendFeedback(Component.translatable("bcr.cmd.blend", String.format("%.2f", s)));
-				return 1;
-			})))
-			.then(literal("remove").then(block().executes(c -> {
-				String id = id(c);
-				Map<String, Rule> next = new LinkedHashMap<>(BcrConfig.entries());
-				if (next.remove(id) == null) {
-					c.getSource().sendError(Component.translatable("bcr.cmd.not_listed", id));
-					return 0;
-				}
-				BcrConfig.apply(next, BcrConfig.blendSeconds());
-				c.getSource().sendFeedback(Component.translatable("bcr.cmd.removed", id));
-				return 1;
-			})))
-			.then(literal("set").then(block()
-				.then(literal("render").then(argument("mode", StringArgumentType.word())
-					.suggests((c, b) -> SharedSuggestionProvider.suggest(new String[] { "default", "solid", "cutout", "translucent" }, b))
-					.executes(c -> {
-						Render r = Render.parse(StringArgumentType.getString(c, "mode"));
-						if (r == null) {
-							c.getSource().sendError(Component.translatable("bcr.cmd.bad_mode"));
-							return 0;
-						}
-						return set(c, rule -> rule.withRender(r));
-					})))
-				.then(literal("cull").then(argument("onoff", StringArgumentType.word())
-					.suggests((c, b) -> SharedSuggestionProvider.suggest(new String[] { "on", "off" }, b))
-					.executes(c -> set(c, rule -> rule.withCullPass(StringArgumentType.getString(c, "onoff").equalsIgnoreCase("on"))))))
-				.then(literal("sway").then(argument("strength", FloatArgumentType.floatArg(0.0F, Rule.SWAY_MAX))
-					.executes(c -> set(c, rule -> rule.withSway(FloatArgumentType.getFloat(c, "strength"))))))))));
+			.then(literal("reload").executes(BcrCommand::reload))
+			.then(literal("check").executes(BcrCommand::check))
+			.then(literal("rule")
+				.executes(c -> rule(c, lookedAt()))
+				.then(argument("block", BlockStateArgument.block(ctx))
+					.executes(c -> rule(c, c.getArgument("block", BlockInput.class).getState()))))));
 	}
 
-	private static com.mojang.brigadier.builder.RequiredArgumentBuilder<FabricClientCommandSource, ResourceLocation> block() {
-		return argument("block", ResourceLocationArgument.id())
-			.suggests((c, b) -> SharedSuggestionProvider.suggestResource(BuiltInRegistries.BLOCK.keySet(), b));
-	}
-
-	private static String id(CommandContext<FabricClientCommandSource> c) {
-		return c.getArgument("block", ResourceLocation.class).toString();
-	}
-
-	private static int set(CommandContext<FabricClientCommandSource> c, java.util.function.UnaryOperator<Rule> change) {
-		String id = id(c);
-		if (!BcrConfig.known(id)) {
-			c.getSource().sendError(Component.translatable("bcr.cmd.unknown", id));
+	private static int reload(CommandContext<FabricClientCommandSource> c) {
+		boolean ok = Rules.reloadOptions();
+		if (!ok) {
+			c.getSource().sendError(Component.translatable("bcr.cmd.reload_failed"));
 			return 0;
 		}
-		Map<String, Rule> next = new LinkedHashMap<>(BcrConfig.entries());
-		Rule r = change.apply(next.getOrDefault(id, Rule.EMPTY));
-		next.put(id, r);
-		BcrConfig.apply(next, BcrConfig.blendSeconds());
-		c.getSource().sendFeedback(Component.literal(describe(id, r)));
+		Rules.Snapshot s = Rules.snapshot();
+		c.getSource().sendFeedback(Component.translatable("bcr.cmd.reloaded", s.table.files().size(), s.size()));
 		return 1;
 	}
 
-	private static int list(CommandContext<FabricClientCommandSource> c) {
-		c.getSource().sendFeedback(Component.translatable("bcr.cmd.list", BcrConfig.entries().size(), String.format("%.2f", BcrConfig.blendSeconds())));
-		for (Map.Entry<String, Rule> e : BcrConfig.entries().entrySet()) {
-			c.getSource().sendFeedback(Component.literal(" " + describe(e.getKey(), e.getValue()) + (BcrConfig.known(e.getKey()) ? "" : " (?)")));
+	private static int check(CommandContext<FabricClientCommandSource> c) {
+		Rules.Snapshot s = Rules.snapshot();
+		Problems p = s.problems;
+		c.getSource().sendFeedback(Component.translatable("bcr.cmd.check_head", s.table.files().size(), p.count(Problems.Severity.ERROR),
+				p.count(Problems.Severity.WARNING), Component.translatable(Rules.tagsReady() ? "bcr.cmd.tags_ready" : "bcr.cmd.tags_not_ready")));
+		int n = 0;
+		for (Problems.Problem x : p.all()) {
+			if (n++ >= CHECK_LINES) {
+				c.getSource().sendFeedback(Component.translatable("bcr.cmd.check_more", p.all().size() - CHECK_LINES));
+				break;
+			}
+			c.getSource().sendFeedback(Component.literal(" " + Rules.format(x)));
+		}
+		return p.all().isEmpty() ? 1 : 0;
+	}
+
+	private static int rule(CommandContext<FabricClientCommandSource> c, BlockState state) {
+		if (state == null) {
+			c.getSource().sendError(Component.translatable("bcr.cmd.no_target"));
+			return 0;
+		}
+		String name = McState.describe(state, BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString());
+		Resolved r = Rules.get(state);
+		if (r == null) {
+			c.getSource().sendFeedback(Component.translatable("bcr.cmd.rule_none", name));
+			return 1;
+		}
+		c.getSource().sendFeedback(Component.translatable("bcr.cmd.rule_head", name));
+		for (Field f : Field.values()) {
+			Object v = r.raw(f);
+			Provenance from = r.from(f);
+			if (v == null || from == null) {
+				continue;
+			}
+			c.getSource().sendFeedback(Component.literal(" " + f.key + " = " + v + "  ← " + from.describe()));
 		}
 		return 1;
 	}
 
-	private static String describe(String id, Rule r) {
-		return id + " — render " + r.render().id + " · cull_pass " + (r.cullPass() ? "on" : "off") + " · sway " + String.format("%.1f", r.sway());
+	private static BlockState lookedAt() {
+		Minecraft mc = Minecraft.getInstance();
+		if (mc.level == null || !(mc.hitResult instanceof BlockHitResult hit) || hit.getType() != HitResult.Type.BLOCK) {
+			return null;
+		}
+		return mc.level.getBlockState(hit.getBlockPos());
 	}
 }

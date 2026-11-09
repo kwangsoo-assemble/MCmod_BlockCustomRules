@@ -1,7 +1,7 @@
 package kr.asmbl.block_custom_rules.mixin;
 
 import kr.asmbl.block_custom_rules.CullPass;
-import kr.asmbl.block_custom_rules.config.BcrConfig;
+import kr.asmbl.block_custom_rules.config.Rules;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.BlockGetter;
@@ -22,7 +22,7 @@ public abstract class SodiumOcclusionMixin {
 	@Inject(method = "shouldDrawSide", at = @At("HEAD"), cancellable = true, remap = false)
 	private void bcr$keepFace(BlockState self, BlockGetter view, BlockPos selfPos, Direction facing, CallbackInfoReturnable<Boolean> cir) {
 		// 컬링 패스 블록이 하나도 없으면 이웃을 한 번 더 읽지 않는다
-		if (!BcrConfig.anyCullPass()) {
+		if (!Rules.anyCullPass()) {
 			return;
 		}
 		if (CullPass.passes(self, view.getBlockState(selfPos.relative(facing)))) {

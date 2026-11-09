@@ -7,8 +7,9 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import kr.asmbl.block_custom_rules.config.BcrConfig;
-import kr.asmbl.block_custom_rules.config.Rule;
+import kr.asmbl.block_custom_rules.config.OptionsFile;
+import kr.asmbl.block_custom_rules.config.Rules;
+import kr.asmbl.block_custom_rules.rules.Resolved;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
@@ -73,6 +74,14 @@ public final class SwayEngine {
 		return SHEAR.isEmpty() ? null : SHEAR.get(pos.asLong());
 	}
 
+	/** 월드 세대가 바뀔 때(접속 · 차원 이동 · 나감) — 다 버린다. 새 월드의 청크는 처음부터 지어진다. */
+	public static void reset() {
+		TILTS.clear();
+		SUMS.clear();
+		SHEAR.clear();
+		lastLevel = null;
+	}
+
 	/** `renderLevel` 머리 — 판정 · 블렌딩 · 바뀐 기둥만 청크 다시 짓기. */
 	public static void update() {
 		Minecraft mc = Minecraft.getInstance();
@@ -91,7 +100,11 @@ public final class SwayEngine {
 			return;
 		}
 
-		collect(level, mc.gameRenderer.getMainCamera().getPosition());
+		if (Rules.anySway()) {
+			collect(level, mc.gameRenderer.getMainCamera().getPosition());
+		} else {
+			SUMS.clear();
+		}
 
 		for (Long2ObjectMap.Entry<double[]> e : SUMS.long2ObjectEntrySet()) {
 			Tilt t = TILTS.get(e.getLongKey());
@@ -105,7 +118,7 @@ public final class SwayEngine {
 			t.tz = TMP[1];
 		}
 
-		double alpha = SwayMath.blendAlpha(dt, BcrConfig.blendSeconds());
+		double alpha = SwayMath.blendAlpha(dt, OptionsFile.blendSeconds());
 		Iterator<Tilt> it = TILTS.values().iterator();
 		while (it.hasNext()) {
 			Tilt t = it.next();
@@ -155,7 +168,7 @@ public final class SwayEngine {
 					for (int y = y0; y <= y1; y++) {
 						CURSOR.set(x, y, z);
 						BlockState state = level.getBlockState(CURSOR);
-						Rule r = BcrConfig.rule(state.getBlock());
+						Resolved r = Rules.get(state);
 						if (r == null || r.sway() <= 0.0F) {
 							continue;
 						}
@@ -200,7 +213,7 @@ public final class SwayEngine {
 
 	private static boolean stillSways(ClientLevel level, Tilt t) {
 		CURSOR.set(t.anchor);
-		Rule r = BcrConfig.rule(level.getBlockState(CURSOR).getBlock());
+		Resolved r = Rules.get(level.getBlockState(CURSOR));
 		return r != null && r.sway() > 0.0F;
 	}
 

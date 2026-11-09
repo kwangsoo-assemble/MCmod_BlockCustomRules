@@ -89,14 +89,14 @@ public final class Groups {
 					if (v.startsWith("#")) {
 						Set<String> sub = members(n.registry(), v.substring(1), d.origin().layer());
 						if (sub == null) {
-							if (this.catalog.ready(n.registry())) {
+							if (this.catalog.tagsReady(n.registry())) {
 								this.problems.warn(d.origin(), vp, "bcr.problem.unknown_tag", v);
 							}
 						} else {
 							acc.addAll(sub);
 						}
 					} else {
-						if (this.catalog.ready(n.registry()) && !this.catalog.exists(n.registry(), v)) {
+						if (this.catalog.idsReady(n.registry()) && !this.catalog.exists(n.registry(), v)) {
 							this.problems.warn(d.origin(), vp, n.registry() == Registry.BIOME ? "bcr.problem.unknown_biome" : "bcr.problem.unknown_block", v);
 						}
 						acc.add(v);
