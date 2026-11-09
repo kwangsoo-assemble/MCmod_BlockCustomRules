@@ -1,4 +1,4 @@
-package kr.asmbl.block_render_rules.command;
+package kr.asmbl.block_custom_rules.command;
 
 import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.argument;
 import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.literal;
@@ -8,9 +8,9 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import kr.asmbl.block_render_rules.config.BrrConfig;
-import kr.asmbl.block_render_rules.config.Render;
-import kr.asmbl.block_render_rules.config.Rule;
+import kr.asmbl.block_custom_rules.config.BcrConfig;
+import kr.asmbl.block_custom_rules.config.Render;
+import kr.asmbl.block_custom_rules.config.Rule;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.minecraft.commands.SharedSuggestionProvider;
@@ -20,38 +20,38 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
 /**
- * 클라 명령 `/brr` — 게임 안에서 블록 규칙을 빨리 바꾼다. 응답은 친 사람 채팅에만 뜬다(클라 명령 · 일부러 치는 명령).
+ * 클라 명령 `/bcr` — 게임 안에서 블록 규칙을 빨리 바꾼다. 응답은 친 사람 채팅에만 뜬다(클라 명령 · 일부러 치는 명령).
  */
-public final class BrrCommand {
-	private BrrCommand() {
+public final class BcrCommand {
+	private BcrCommand() {
 	}
 
 	public static void register() {
-		ClientCommandRegistrationCallback.EVENT.register((dispatcher, ctx) -> dispatcher.register(literal("brr")
-			.then(literal("list").executes(BrrCommand::list))
+		ClientCommandRegistrationCallback.EVENT.register((dispatcher, ctx) -> dispatcher.register(literal("bcr")
+			.then(literal("list").executes(BcrCommand::list))
 			.then(literal("reload").executes(c -> {
-				if (!BrrConfig.reload()) {
-					c.getSource().sendError(Component.translatable("brr.cmd.reload_failed"));
+				if (!BcrConfig.reload()) {
+					c.getSource().sendError(Component.translatable("bcr.cmd.reload_failed"));
 					return 0;
 				}
-				c.getSource().sendFeedback(Component.translatable("brr.cmd.reloaded", BrrConfig.entries().size()));
+				c.getSource().sendFeedback(Component.translatable("bcr.cmd.reloaded", BcrConfig.entries().size()));
 				return 1;
 			}))
 			.then(literal("blend").then(argument("seconds", FloatArgumentType.floatArg(0.0F, 5.0F)).executes(c -> {
 				float s = FloatArgumentType.getFloat(c, "seconds");
-				BrrConfig.apply(BrrConfig.entries(), s);
-				c.getSource().sendFeedback(Component.translatable("brr.cmd.blend", String.format("%.2f", s)));
+				BcrConfig.apply(BcrConfig.entries(), s);
+				c.getSource().sendFeedback(Component.translatable("bcr.cmd.blend", String.format("%.2f", s)));
 				return 1;
 			})))
 			.then(literal("remove").then(block().executes(c -> {
 				String id = id(c);
-				Map<String, Rule> next = new LinkedHashMap<>(BrrConfig.entries());
+				Map<String, Rule> next = new LinkedHashMap<>(BcrConfig.entries());
 				if (next.remove(id) == null) {
-					c.getSource().sendError(Component.translatable("brr.cmd.not_listed", id));
+					c.getSource().sendError(Component.translatable("bcr.cmd.not_listed", id));
 					return 0;
 				}
-				BrrConfig.apply(next, BrrConfig.blendSeconds());
-				c.getSource().sendFeedback(Component.translatable("brr.cmd.removed", id));
+				BcrConfig.apply(next, BcrConfig.blendSeconds());
+				c.getSource().sendFeedback(Component.translatable("bcr.cmd.removed", id));
 				return 1;
 			})))
 			.then(literal("set").then(block()
@@ -60,7 +60,7 @@ public final class BrrCommand {
 					.executes(c -> {
 						Render r = Render.parse(StringArgumentType.getString(c, "mode"));
 						if (r == null) {
-							c.getSource().sendError(Component.translatable("brr.cmd.bad_mode"));
+							c.getSource().sendError(Component.translatable("bcr.cmd.bad_mode"));
 							return 0;
 						}
 						return set(c, rule -> rule.withRender(r));
@@ -83,22 +83,22 @@ public final class BrrCommand {
 
 	private static int set(CommandContext<FabricClientCommandSource> c, java.util.function.UnaryOperator<Rule> change) {
 		String id = id(c);
-		if (!BrrConfig.known(id)) {
-			c.getSource().sendError(Component.translatable("brr.cmd.unknown", id));
+		if (!BcrConfig.known(id)) {
+			c.getSource().sendError(Component.translatable("bcr.cmd.unknown", id));
 			return 0;
 		}
-		Map<String, Rule> next = new LinkedHashMap<>(BrrConfig.entries());
+		Map<String, Rule> next = new LinkedHashMap<>(BcrConfig.entries());
 		Rule r = change.apply(next.getOrDefault(id, Rule.EMPTY));
 		next.put(id, r);
-		BrrConfig.apply(next, BrrConfig.blendSeconds());
+		BcrConfig.apply(next, BcrConfig.blendSeconds());
 		c.getSource().sendFeedback(Component.literal(describe(id, r)));
 		return 1;
 	}
 
 	private static int list(CommandContext<FabricClientCommandSource> c) {
-		c.getSource().sendFeedback(Component.translatable("brr.cmd.list", BrrConfig.entries().size(), String.format("%.2f", BrrConfig.blendSeconds())));
-		for (Map.Entry<String, Rule> e : BrrConfig.entries().entrySet()) {
-			c.getSource().sendFeedback(Component.literal(" " + describe(e.getKey(), e.getValue()) + (BrrConfig.known(e.getKey()) ? "" : " (?)")));
+		c.getSource().sendFeedback(Component.translatable("bcr.cmd.list", BcrConfig.entries().size(), String.format("%.2f", BcrConfig.blendSeconds())));
+		for (Map.Entry<String, Rule> e : BcrConfig.entries().entrySet()) {
+			c.getSource().sendFeedback(Component.literal(" " + describe(e.getKey(), e.getValue()) + (BcrConfig.known(e.getKey()) ? "" : " (?)")));
 		}
 		return 1;
 	}

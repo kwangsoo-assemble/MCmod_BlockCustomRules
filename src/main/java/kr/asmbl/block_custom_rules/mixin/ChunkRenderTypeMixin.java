@@ -1,10 +1,10 @@
-package kr.asmbl.block_render_rules.mixin;
+package kr.asmbl.block_custom_rules.mixin;
 
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
-import kr.asmbl.block_render_rules.config.BrrConfig;
-import kr.asmbl.block_render_rules.config.Render;
-import kr.asmbl.block_render_rules.config.Rule;
+import kr.asmbl.block_custom_rules.config.BcrConfig;
+import kr.asmbl.block_custom_rules.config.Render;
+import kr.asmbl.block_custom_rules.config.Rule;
 import net.minecraft.client.renderer.ItemBlockRenderTypes;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.chunk.ChunkSectionLayer;
@@ -20,8 +20,8 @@ import org.spongepowered.asm.mixin.Mixin;
 @Mixin(ItemBlockRenderTypes.class)
 public abstract class ChunkRenderTypeMixin {
 	@WrapMethod(method = "getChunkRenderType")
-	private static ChunkSectionLayer brr$chunkLayer(BlockState state, Operation<ChunkSectionLayer> original) {
-		Rule r = BrrConfig.rule(state.getBlock());
+	private static ChunkSectionLayer bcr$chunkLayer(BlockState state, Operation<ChunkSectionLayer> original) {
+		Rule r = BcrConfig.rule(state.getBlock());
 		if (r == null) {
 			return original.call(state);
 		}
@@ -34,8 +34,8 @@ public abstract class ChunkRenderTypeMixin {
 	}
 
 	@WrapMethod(method = "getMovingBlockRenderType")
-	private static RenderType brr$movingLayer(BlockState state, Operation<RenderType> original) {
-		Rule r = BrrConfig.rule(state.getBlock());
+	private static RenderType bcr$movingLayer(BlockState state, Operation<RenderType> original) {
+		Rule r = BcrConfig.rule(state.getBlock());
 		if (r == null || r.render() == Render.DEFAULT) {
 			return original.call(state);
 		}

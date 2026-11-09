@@ -1,4 +1,4 @@
-package kr.asmbl.block_render_rules.config;
+package kr.asmbl.block_custom_rules.config;
 
 import java.util.Locale;
 

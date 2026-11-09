@@ -1,4 +1,4 @@
-package kr.asmbl.block_render_rules.config;
+package kr.asmbl.block_custom_rules.config;
 
 /**
  * 블록 하나의 규칙 — 텍스처 그리는 방식 · 옆 블록 면을 가리지 않기(컬링 패스) · 휘기 세기(0 이면 안 휜다).

@@ -1,7 +1,7 @@
 {
 	"required": true,
 	"minVersion": "0.8",
-	"package": "kr.asmbl.block_render_rules.mixin",
+	"package": "kr.asmbl.block_custom_rules.mixin",
 	"compatibilityLevel": "JAVA_21",
 	"client": [
 		"BlockFaceMixin",

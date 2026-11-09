@@ -1,6 +1,6 @@
-package kr.asmbl.block_render_rules.mixin;
+package kr.asmbl.block_custom_rules.mixin;
 
-import kr.asmbl.block_render_rules.sway.SwayEngine;
+import kr.asmbl.block_custom_rules.sway.SwayEngine;
 import net.minecraft.client.renderer.LevelRenderer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -11,7 +11,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(LevelRenderer.class)
 public abstract class LevelRendererMixin {
 	@Inject(method = "renderLevel", at = @At("HEAD"))
-	private void brr$swayUpdate(CallbackInfo ci) {
+	private void bcr$swayUpdate(CallbackInfo ci) {
 		SwayEngine.update();
 	}
 }

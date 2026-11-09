@@ -1,4 +1,4 @@
-package kr.asmbl.block_render_rules.sway;
+package kr.asmbl.block_custom_rules.sway;
 
 /**
  * 휘기 계산 — 마인크래프트에 기대지 않는 순수 함수(게임 없이 시험한다 · `src/test-standalone`).

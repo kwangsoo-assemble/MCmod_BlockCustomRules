@@ -1,4 +1,4 @@
-package kr.asmbl.block_render_rules.sway;
+package kr.asmbl.block_custom_rules.sway;
 
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
@@ -7,8 +7,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import kr.asmbl.block_render_rules.config.BrrConfig;
-import kr.asmbl.block_render_rules.config.Rule;
+import kr.asmbl.block_custom_rules.config.BcrConfig;
+import kr.asmbl.block_custom_rules.config.Rule;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
@@ -105,7 +105,7 @@ public final class SwayEngine {
 			t.tz = TMP[1];
 		}
 
-		double alpha = SwayMath.blendAlpha(dt, BrrConfig.blendSeconds());
+		double alpha = SwayMath.blendAlpha(dt, BcrConfig.blendSeconds());
 		Iterator<Tilt> it = TILTS.values().iterator();
 		while (it.hasNext()) {
 			Tilt t = it.next();
@@ -155,7 +155,7 @@ public final class SwayEngine {
 					for (int y = y0; y <= y1; y++) {
 						CURSOR.set(x, y, z);
 						BlockState state = level.getBlockState(CURSOR);
-						Rule r = BrrConfig.rule(state.getBlock());
+						Rule r = BcrConfig.rule(state.getBlock());
 						if (r == null || r.sway() <= 0.0F) {
 							continue;
 						}
@@ -200,7 +200,7 @@ public final class SwayEngine {
 
 	private static boolean stillSways(ClientLevel level, Tilt t) {
 		CURSOR.set(t.anchor);
-		Rule r = BrrConfig.rule(level.getBlockState(CURSOR).getBlock());
+		Rule r = BcrConfig.rule(level.getBlockState(CURSOR).getBlock());
 		return r != null && r.sway() > 0.0F;
 	}
 

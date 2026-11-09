@@ -1,7 +1,7 @@
-package kr.asmbl.block_render_rules;
+package kr.asmbl.block_custom_rules;
 
-import kr.asmbl.block_render_rules.config.BrrConfig;
-import kr.asmbl.block_render_rules.config.Rule;
+import kr.asmbl.block_custom_rules.config.BcrConfig;
+import kr.asmbl.block_custom_rules.config.Rule;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 
@@ -16,7 +16,7 @@ public final class CullPass {
 		if (block == self.getBlock()) {
 			return false;
 		}
-		Rule r = BrrConfig.rule(block);
+		Rule r = BcrConfig.rule(block);
 		return r != null && r.cullPass();
 	}
 }

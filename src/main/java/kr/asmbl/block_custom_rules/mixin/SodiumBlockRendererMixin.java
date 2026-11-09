@@ -1,6 +1,6 @@
-package kr.asmbl.block_render_rules.mixin;
+package kr.asmbl.block_custom_rules.mixin;
 
-import kr.asmbl.block_render_rules.sway.SwayEngine;
+import kr.asmbl.block_custom_rules.sway.SwayEngine;
 import net.fabricmc.fabric.api.renderer.v1.mesh.QuadEmitter;
 import net.minecraft.client.renderer.block.model.BlockStateModel;
 import net.minecraft.core.BlockPos;
@@ -25,16 +25,16 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(targets = "net.caffeinemc.mods.sodium.client.render.chunk.compile.pipeline.BlockRenderer", remap = false)
 public abstract class SodiumBlockRendererMixin {
 	@Unique
-	private float[] brr$shear;
+	private float[] bcr$shear;
 
 	@Inject(method = "renderModel", at = @At("HEAD"), remap = false)
-	private void brr$begin(BlockStateModel model, BlockState state, BlockPos pos, BlockPos origin, CallbackInfo ci) {
-		this.brr$shear = SwayEngine.shear(pos);
+	private void bcr$begin(BlockStateModel model, BlockState state, BlockPos pos, BlockPos origin, CallbackInfo ci) {
+		this.bcr$shear = SwayEngine.shear(pos);
 	}
 
 	@Inject(method = "processQuad", at = @At("HEAD"), remap = false)
-	private void brr$tilt(@Coerce QuadEmitter quad, CallbackInfo ci) {
-		float[] s = this.brr$shear;
+	private void bcr$tilt(@Coerce QuadEmitter quad, CallbackInfo ci) {
+		float[] s = this.bcr$shear;
 		if (s == null) {
 			return;
 		}

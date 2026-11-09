@@ -1,6 +1,6 @@
-package kr.asmbl.block_render_rules.mixin;
+package kr.asmbl.block_custom_rules.mixin;
 
-import kr.asmbl.block_render_rules.CullPass;
+import kr.asmbl.block_custom_rules.CullPass;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
@@ -18,7 +18,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(Block.class)
 public abstract class BlockFaceMixin {
 	@Inject(method = "shouldRenderFace", at = @At("HEAD"), cancellable = true, require = 1)
-	private static void brr$keepFace(BlockState self, BlockState neighbor, Direction face, CallbackInfoReturnable<Boolean> cir) {
+	private static void bcr$keepFace(BlockState self, BlockState neighbor, Direction face, CallbackInfoReturnable<Boolean> cir) {
 		if (CullPass.passes(self, neighbor)) {
 			cir.setReturnValue(true);
 		}

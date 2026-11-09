@@ -1,4 +1,4 @@
-package kr.asmbl.block_render_rules.config;
+package kr.asmbl.block_custom_rules.config;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -24,14 +24,14 @@ import net.minecraft.world.level.block.Block;
 import org.slf4j.Logger;
 
 /**
- * `config/block_render_rules.json` — 블록마다 규칙 하나 · 맨 위에 휘기 블렌딩 초.
+ * `config/block_custom_rules.json` — 블록마다 규칙 하나 · 맨 위에 휘기 블렌딩 초.
  * 청크를 짓는 스레드 여럿이 동시에 읽으므로 표는 통째로 바꿔 끼운다(volatile · 바뀌지 않는 표).
  */
-public final class BrrConfig {
+public final class BcrConfig {
 	private static final Logger LOG = LogUtils.getLogger();
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
 	private static final Path DIR = FabricLoader.getInstance().getConfigDir();
-	private static final Path FILE = DIR.resolve("block_render_rules.json");
+	private static final Path FILE = DIR.resolve("block_custom_rules.json");
 	public static final float BLEND_DEFAULT = 0.25F;
 
 	private static volatile Map<String, Rule> entries = defaults();
@@ -41,7 +41,7 @@ public final class BrrConfig {
 	// 컬링 패스 판정이 이웃마다 표를 뒤지지 않게 — 켜진 블록이 하나도 없으면 바로 빠진다
 	private static volatile boolean anyCullPass = true;
 
-	private BrrConfig() {
+	private BcrConfig() {
 	}
 
 	/** 그 블록의 규칙 · 없으면 null. 청크 스레드에서 불린다. */
@@ -106,7 +106,7 @@ public final class BrrConfig {
 			return true;
 		} catch (IOException | RuntimeException e) {
 			// 파일을 덮지 않는다 — 손으로 고치다 틀린 것일 수 있다 · 직전 값을 그대로 쓴다
-			LOG.warn("[block_render_rules] {} 를 못 읽어 직전 설정을 쓴다: {}", FILE, e.toString());
+			LOG.warn("[block_custom_rules] {} 를 못 읽어 직전 설정을 쓴다: {}", FILE, e.toString());
 			return false;
 		}
 	}
@@ -136,7 +136,7 @@ public final class BrrConfig {
 		if (o.has("render")) {
 			Render r = Render.parse(o.get("render").getAsString());
 			if (r == null) {
-				LOG.warn("[block_render_rules] {} 의 render 값 «{}» 을 모른다 — default 로 둔다", id, o.get("render").getAsString());
+				LOG.warn("[block_custom_rules] {} 의 render 값 «{}» 을 모른다 — default 로 둔다", id, o.get("render").getAsString());
 			} else {
 				render = r;
 			}
@@ -163,7 +163,7 @@ public final class BrrConfig {
 			Files.createDirectories(DIR);
 			Files.writeString(FILE, GSON.toJson(root) + "\n", StandardCharsets.UTF_8);
 		} catch (IOException e) {
-			LOG.warn("[block_render_rules] {} 를 못 썼다: {}", FILE, e.toString());
+			LOG.warn("[block_custom_rules] {} 를 못 썼다: {}", FILE, e.toString());
 		}
 	}
 

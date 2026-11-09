@@ -1,7 +1,7 @@
-package kr.asmbl.block_render_rules.mixin;
+package kr.asmbl.block_custom_rules.mixin;
 
-import kr.asmbl.block_render_rules.CullPass;
-import kr.asmbl.block_render_rules.config.BrrConfig;
+import kr.asmbl.block_custom_rules.CullPass;
+import kr.asmbl.block_custom_rules.config.BcrConfig;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.BlockGetter;
@@ -20,9 +20,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(targets = "net.caffeinemc.mods.sodium.client.render.chunk.compile.pipeline.BlockOcclusionCache", remap = false)
 public abstract class SodiumOcclusionMixin {
 	@Inject(method = "shouldDrawSide", at = @At("HEAD"), cancellable = true, remap = false)
-	private void brr$keepFace(BlockState self, BlockGetter view, BlockPos selfPos, Direction facing, CallbackInfoReturnable<Boolean> cir) {
+	private void bcr$keepFace(BlockState self, BlockGetter view, BlockPos selfPos, Direction facing, CallbackInfoReturnable<Boolean> cir) {
 		// 컬링 패스 블록이 하나도 없으면 이웃을 한 번 더 읽지 않는다
-		if (!BrrConfig.anyCullPass()) {
+		if (!BcrConfig.anyCullPass()) {
 			return;
 		}
 		if (CullPass.passes(self, view.getBlockState(selfPos.relative(facing)))) {

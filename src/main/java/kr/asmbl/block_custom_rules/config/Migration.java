@@ -1,4 +1,4 @@
-package kr.asmbl.block_render_rules.config;
+package kr.asmbl.block_custom_rules.config;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -30,14 +30,14 @@ public final class Migration {
 			try {
 				JsonObject root = JsonParser.parseString(Files.readString(cull, StandardCharsets.UTF_8)).getAsJsonObject();
 				for (JsonElement e : root.getAsJsonArray("blocks")) {
-					String id = BrrConfig.normalize(e.getAsString());
+					String id = BcrConfig.normalize(e.getAsString());
 					if (!id.equals("minecraft:")) {
 						out.merge(id, new Rule(Render.DEFAULT, true, 0.0F), (a, b) -> a.withCullPass(true));
 					}
 				}
 				any = true;
 			} catch (Exception e) {
-				LOG.warn("[block_render_rules] 옛 {} 를 못 읽어 건너뛴다: {}", cull, e.toString());
+				LOG.warn("[block_custom_rules] 옛 {} 를 못 읽어 건너뛴다: {}", cull, e.toString());
 			}
 		}
 		Path sway = dir.resolve("sway.json");
@@ -48,17 +48,17 @@ public final class Migration {
 				if (blocks != null) {
 					for (Map.Entry<String, JsonElement> e : blocks.entrySet()) {
 						float s = e.getValue().isJsonNull() ? 1.0F : e.getValue().getAsFloat();
-						String id = BrrConfig.normalize(e.getKey());
+						String id = BcrConfig.normalize(e.getKey());
 						out.merge(id, new Rule(Render.DEFAULT, false, s), (a, b) -> a.withSway(b.sway()));
 					}
 				}
 				any = true;
 			} catch (Exception e) {
-				LOG.warn("[block_render_rules] 옛 {} 를 못 읽어 건너뛴다: {}", sway, e.toString());
+				LOG.warn("[block_custom_rules] 옛 {} 를 못 읽어 건너뛴다: {}", sway, e.toString());
 			}
 		}
 		if (any) {
-			LOG.info("[block_render_rules] 옛 설정에서 블록 {} 개를 옮겼다", out.size());
+			LOG.info("[block_custom_rules] 옛 설정에서 블록 {} 개를 옮겼다", out.size());
 		}
 		return any ? out : null;
 	}

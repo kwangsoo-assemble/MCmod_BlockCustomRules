@@ -9,4 +9,4 @@ pluginManagement {
 	}
 }
 
-rootProject.name = 'block_render_rules'
+rootProject.name = 'block_custom_rules'

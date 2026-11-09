@@ -1,9 +1,9 @@
 {
 	"schemaVersion": 1,
-	"id": "block_render_rules",
+	"id": "block_custom_rules",
 	"version": "${version}",
-	"name": "Block Render Rules",
-	"description": "Per-block render rules: how a block's texture is drawn (solid / cutout / translucent), whether it hides its neighbours' faces, and how much it sways when entities brush through it.",
+	"name": "Block Custom Rules",
+	"description": "Per-block rules from resource packs: texture draw mode, face culling, sway, and sound categories with layered footsteps that replace Presence Footsteps.",
 	"authors": [
 		"kwangsoo"
 	],
@@ -12,15 +12,15 @@
 	"environment": "client",
 	"entrypoints": {
 		"client": [
-			"kr.asmbl.block_render_rules.BrrClient"
+			"kr.asmbl.block_custom_rules.BcrClient"
 		],
 		"modmenu": [
-			"kr.asmbl.block_render_rules.screen.BrrModMenu"
+			"kr.asmbl.block_custom_rules.screen.BcrModMenu"
 		]
 	},
 	"mixins": [
 		{
-			"config": "block_render_rules.mixins.json",
+			"config": "block_custom_rules.mixins.json",
 			"environment": "client"
 		}
 	],
@@ -28,11 +28,15 @@
 		"fabricloader": ">=0.19.3",
 		"minecraft": "~1.21.8",
 		"java": ">=21",
-		"fabric-command-api-v2": "*"
+		"fabric-command-api-v2": "*",
+		"fabric-lifecycle-events-v1": "*",
+		"fabric-resource-loader-v0": "*"
 	},
 	"breaks": {
+		"block_render_rules": "*",
 		"cull_pass": "*",
-		"sway": "*"
+		"sway": "*",
+		"presencefootsteps": "*"
 	},
 	"suggests": {
 		"modmenu": "*"
