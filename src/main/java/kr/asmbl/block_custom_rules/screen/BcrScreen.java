@@ -87,7 +87,7 @@ public final class BcrScreen extends Screen {
 		int indent;
 		final List<Seg> segs = new ArrayList<>();
 		/** 누르면 펼치기 · 접기 열쇠. */
-		Object toggle;
+		String toggle;
 		/** «모드 옵션으로 복사» 할 줄. */
 		JsonObject copy;
 		/** 마우스를 올리면 보일 전체 글. */
@@ -98,7 +98,8 @@ public final class BcrScreen extends Screen {
 		}
 
 		Row seg(String text, int color) {
-			this.segs.add(new Seg(text, color));
+			// 출처 구분표 «›» 는 펼치기 표시와 헷갈려 화면에선 «/» 로
+			this.segs.add(new Seg(text.replace(" › ", " / "), color));
 			return this;
 		}
 	}
@@ -116,7 +117,8 @@ public final class BcrScreen extends Screen {
 	private String typed = "";
 	private Tab tab = Tab.RULES;
 	private int scroll;
-	private final Set<Object> open = Collections.newSetFromMap(new IdentityHashMap<>());
+	/** 펼친 줄 — 출처 + 경로 글자로 찾는다(줄 객체는 다시 그릴 때마다 새로 만들어진다). */
+	private final Set<String> open = new java.util.HashSet<>();
 	private final List<Placed> placed = new ArrayList<>();
 	private boolean more;
 	/** 대상 글자 → 검사 색(프레임마다 다시 검사하지 않게). */
@@ -246,7 +248,11 @@ public final class BcrScreen extends Screen {
 		statusRows(snap, rows);
 		List<String> order = new ArrayList<>(snap.packOrder);
 		Collections.reverse(order);
-		String o = tr("bcr.lookup.order", String.join(" › ", order));
+		StringBuilder ob = new StringBuilder();
+		for (int i = 0; i < order.size(); i++) {
+			ob.append(i == 0 ? "" : "  ").append(i + 1).append(") ").append(order.get(i));
+		}
+		String o = tr("bcr.lookup.order", ob.toString());
 		Row orderRow = new Row(LINE).seg(o, GRAY);
 		orderRow.tip = o;
 		rows.add(orderRow);
@@ -279,13 +285,14 @@ public final class BcrScreen extends Screen {
 	}
 
 	private void lineRows(Lookup.LineView lv, RuleFile file, List<Row> rows) {
-		boolean isOpen = this.open.contains(lv.line());
+		String key = file.origin.describe() + "#" + lv.line().path();
+		boolean isOpen = this.open.contains(key);
 		String target = lv.line().targetJson() == null ? "?" : compact(lv.line().targetJson());
 		Row head = new Row(LINE);
 		head.indent = 1;
-		head.toggle = lv.line();
+		head.toggle = key;
 		head.tip = target;
-		head.seg(isOpen ? "▾ " : "▸ ", GRAY).seg(target, WHITE);
+		head.seg(isOpen ? "[-] " : "[+] ", AQUA).seg(target, WHITE);
 		for (Lookup.FieldView f : lv.fields()) {
 			head.seg("  " + fieldLabel(f.field(), f.value()), f.covered() ? DIM : f.partial() ? YELLOW : WHITE);
 		}
@@ -323,7 +330,7 @@ public final class BcrScreen extends Screen {
 				rows.add(sub(s, color));
 			}
 		}
-		rows.add(sub(tr("bcr.lookup.source", file.origin.describe() + " › " + lv.line().path()), DIM));
+		rows.add(sub(tr("bcr.lookup.source", file.origin.describe() + " / " + lv.line().path()), DIM));
 	}
 
 	private static Row sub(String text, int color) {
@@ -400,14 +407,15 @@ public final class BcrScreen extends Screen {
 					fh.indent = 1;
 					rows.add(fh);
 				}
-				boolean isOpen = this.open.contains(e);
+				String key = "sound#" + e.origin().describe() + "#" + section + "#" + e.key();
+				boolean isOpen = this.open.contains(key);
 				boolean covered = e.coveredBy() != null;
 				String text = e.key() + ": " + compact(e.value());
 				Row r = new Row(LINE);
 				r.indent = 2;
-				r.toggle = e;
+				r.toggle = key;
 				r.tip = text;
-				r.seg(isOpen ? "▾ " : "▸ ", GRAY).seg(text, covered ? DIM : WHITE);
+				r.seg(isOpen ? "[-] " : "[+] ", AQUA).seg(text, covered ? DIM : WHITE);
 				rows.add(r);
 				if (!isOpen) {
 					continue;
@@ -639,6 +647,9 @@ public final class BcrScreen extends Screen {
 					tip = l.target;
 				}
 				continue;
+			}
+			if (hover && (r.toggle != null || r.copy != null)) {
+				g.fill(this.rowX - 2, y, this.rowX + this.rowW + 2, y + r.h, 0x22FFFFFF);
 			}
 			int right = this.rowX + this.rowW - (r.copy != null ? copyWidth() : 0);
 			int x = this.rowX + r.indent * 8;
