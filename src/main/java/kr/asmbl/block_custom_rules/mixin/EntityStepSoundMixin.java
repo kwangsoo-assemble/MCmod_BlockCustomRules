@@ -3,6 +3,7 @@ package kr.asmbl.block_custom_rules.mixin;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import kr.asmbl.block_custom_rules.sound.HeldBlock;
+import kr.asmbl.block_custom_rules.step.FootstepEngine;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -16,8 +17,13 @@ import org.spongepowered.asm.mixin.Mixin;
 public abstract class EntityStepSoundMixin {
 	@WrapMethod(method = "walkingStepSound")
 	private void bcr$walking(BlockPos pos, BlockState state, Operation<Void> original) {
-		if (!((Entity) (Object) this).level().isClientSide()) {
+		Entity self = (Entity) (Object) this;
+		if (!self.level().isClientSide()) {
 			original.call(pos, state);
+			return;
+		}
+		// 발소리 엔진이 맡는 엔티티는 바닐라 걸음 · 종소리를 끈다(D33 — 클라 쪽만 · 서버 쪽은 그대로라 모드 없는 손님도 듣는다)
+		if (FootstepEngine.handles(self)) {
 			return;
 		}
 		BlockState prev = HeldBlock.swap(state);

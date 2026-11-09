@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import kr.asmbl.block_custom_rules.config.Rules;
 import kr.asmbl.block_custom_rules.rules.Resolved;
+import kr.asmbl.block_custom_rules.step.FootstepEngine;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
@@ -33,13 +34,25 @@ public final class SoundHub {
 	private SoundHub() {
 	}
 
-	/** 위치 소리 · 서버 패킷 — 바꿀 게 없으면 null. */
+	/** 막는다 — 이 엔진이 내는 남의 걸음 패킷(D33). */
+	public static final Replacement CANCEL = new Replacement(null, 0.0F, 0.0F, "blocked footstep packet");
+
+	/** 위치 소리 · 서버 패킷 — 바꿀 게 없으면 null · 막으면 {@link #CANCEL}. */
 	public static Replacement onPlay(ClientLevel level, double x, double y, double z, SoundEvent ev, SoundSource source, float volume, float pitch, long seed) {
+		String id = ev.location().toString();
+		if (HeldBlock.inPacket()) {
+			try {
+				if (FootstepEngine.blocksPacket(level, x, y, z, id, source, volume, pitch, seed)) {
+					return CANCEL;
+				}
+			} catch (RuntimeException | LinkageError e) {
+				warnOnce(e);
+			}
+		}
 		Rules.Snapshot snap = Rules.snapshot();
 		if (!snap.anySoundCategory) {
 			return null;
 		}
-		String id = ev.location().toString();
 		String[] parts = SoundNames.split(id);
 		if (parts == null) {
 			return null;

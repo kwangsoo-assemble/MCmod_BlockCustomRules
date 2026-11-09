@@ -18,6 +18,9 @@ public abstract class ClientLevelSoundMixin {
 	private void bcr$replace(double x, double y, double z, SoundEvent event, SoundSource source, float volume, float pitch, boolean delay, long seed,
 			Operation<Void> original) {
 		SoundHub.Replacement r = SoundHub.onPlay((ClientLevel) (Object) this, x, y, z, event, source, volume, pitch, seed);
+		if (r == SoundHub.CANCEL) {
+			return;
+		}
 		if (r == null) {
 			original.call(x, y, z, event, source, volume, pitch, delay, seed);
 		} else {

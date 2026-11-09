@@ -1,0 +1,16 @@
+{
+	"_comment": "1.21.8 바닐라 태그를 펼쳐 옮긴 것(combination_step_sound_blocks · inside_step_sound_blocks · crystal_sound_blocks) — 데이터팩 태그는 안 본다(D32). MC 판을 올리면 jar 의 data/minecraft/tags/block/ 에서 다시 옮긴다.",
+	"combination": [
+		"minecraft:white_carpet", "minecraft:orange_carpet", "minecraft:magenta_carpet", "minecraft:light_blue_carpet",
+		"minecraft:yellow_carpet", "minecraft:lime_carpet", "minecraft:pink_carpet", "minecraft:gray_carpet",
+		"minecraft:light_gray_carpet", "minecraft:cyan_carpet", "minecraft:purple_carpet", "minecraft:blue_carpet",
+		"minecraft:brown_carpet", "minecraft:green_carpet", "minecraft:red_carpet", "minecraft:black_carpet",
+		"minecraft:moss_carpet", "minecraft:pale_moss_carpet", "minecraft:snow", "minecraft:nether_sprouts",
+		"minecraft:warped_roots", "minecraft:crimson_roots", "minecraft:resin_clump"
+	],
+	"inside": [
+		"minecraft:powder_snow", "minecraft:sculk_vein", "minecraft:glow_lichen", "minecraft:lily_pad",
+		"minecraft:small_amethyst_bud", "minecraft:pink_petals", "minecraft:wildflowers", "minecraft:leaf_litter"
+	],
+	"crystal": ["minecraft:amethyst_block", "minecraft:budding_amethyst"]
+}

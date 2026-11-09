@@ -1,6 +1,9 @@
 package kr.asmbl.block_custom_rules;
 
+import com.mojang.logging.LogUtils;
 import kr.asmbl.block_custom_rules.command.BcrCommand;
+import kr.asmbl.block_custom_rules.step.FootstepEngine;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import kr.asmbl.block_custom_rules.config.OptionsFile;
 import kr.asmbl.block_custom_rules.sway.SwayEngine;
 import kr.asmbl.block_custom_rules.world.Generation;
@@ -14,6 +17,10 @@ public final class BcrClient implements ClientModInitializer {
 		OptionsFile.load();
 		WorldHooks.register();
 		Generation.onReset(SwayEngine::reset);
+		Generation.onReset(FootstepEngine::reset);
+		Generation.onEntityGone(FootstepEngine::entityGone);
+		FootstepEngine.DELAYED.errorSink((what, t) -> LogUtils.getLogger().warn("[block_custom_rules] 지연 소리 예외({}) — 그 소리만 버렸다", what, t));
+		ClientTickEvents.END_CLIENT_TICK.register(FootstepEngine::tick);
 		BcrCommand.register();
 	}
 }
