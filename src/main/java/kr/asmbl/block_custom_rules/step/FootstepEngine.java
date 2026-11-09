@@ -35,7 +35,7 @@ import org.slf4j.Logger;
 
 /**
  * 발소리 엔진(D24 ~ D29 · D33 ~ D35) — 이번 판(T4)은 플레이어(나 · 남)만 맡는다. 몹은 바닐라 그대로(T10).
- * 대상: 카메라 16칸 · 최대 50(가까운 순) · 빼기: 관전자 · 잠 · 탄 엔티티 · 물속(헤엄은 바닐라 그대로) · 남의 무음 플레이어는 맡되 소리를 안 낸다(내 것은 바닐라처럼 낸다).
+ * 대상: 카메라 16칸 · 최대 50(가까운 순) · 빼기: 관전자 · 잠 · 탄 엔티티 · 물속(헤엄은 바닐라 그대로) · 무음은 맡되 소리를 안 낸다.
  * 맡는 플레이어는 바닐라 걸음을 끄고(내 것 = 클라 쪽 `walkingStepSound` · 남의 것 = 서버 걸음 패킷) 이 엔진이 낸다.
  * 걸음마다 발 하나(왼 · 오른 번갈아) — 발 자리 블록 · 발 칸(안쪽 · 겹침 · `step_as` · 지나감) · 자수정 종소리 · 입장 · 퇴장.
  * 소리 이름은 종류 → 행동 → 행동 부모 → 부모 종류 → 끝내 없으면 그 블록의 바닐라 걸음(웅크림 · 지나감 · 입장 · 퇴장은 무음).
@@ -88,7 +88,7 @@ public final class FootstepEngine {
 		HANDLED.remove(id);
 	}
 
-	/** 이 엔티티의 바닐라 걸음(클라 쪽)을 끌까 — 내 플레이어를 맡을 때(무음이어도 엔진이 대신 낸다). */
+	/** 이 엔티티의 바닐라 걸음(클라 쪽)을 끌까 — 내 플레이어를 맡을 때. 무음이어도 끈다(무음은 엔진도 안 낸다). */
 	public static boolean handles(Entity e) {
 		return e == Minecraft.getInstance().player && eligible(e);
 	}
@@ -126,8 +126,7 @@ public final class FootstepEngine {
 				}
 				n++;
 				HANDLED.add(p.getId());
-				// 무음은 남에게만 — 바닐라 · PF 처럼 내 화면의 내 발소리는 무음이어도 낸다(무음 표시는 저장돼 촬영 뒤에도 남는다)
-				if (p.isSilent() && p != mc.player) {
+				if (p.isSilent()) {
 					continue;
 				}
 				live.add(p.getId());
