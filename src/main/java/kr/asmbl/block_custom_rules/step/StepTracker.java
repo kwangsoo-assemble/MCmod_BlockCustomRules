@@ -9,7 +9,7 @@ import java.util.Map;
  * 간격은 «걸은 칸 × 0.6»(바닐라 `moveDist` 단위)을 쌓아 넘을 때마다: 걷기 0.95 · 계단 오름 0.6175 · 사다리 0.5 · 계단 내림은 바로.
  * 넘친 만큼은 다음 걸음으로 넘긴다 — 평균 간격이 바닐라(1 · 약 1.67칸)의 0.95배(약 1.58칸)가 된다.
  * 꺾기 · 멈춤: 이번 틱 · 지난 틱 가로 움직임의 내적이 0.001 아래로 떨어지는 순간(PF — 멈춤 · 한 틱 안 급히 꺾기) 또는
- * 최근 5틱 안의 움직임과 65° 넘게 어긋날 때(가속 · 마찰로 2 ~ 4틱에 걸쳐 도는 꺾기) `wander` 한 발 · 꺾기 뒤 8틱은 다시 안 낸다.
+ * 최근 3틱 안의 움직임과 90° 이상 어긋날 때(가속 · 마찰로 2 ~ 3틱에 걸쳐 도는 꺾기) `wander` 한 발 · 꺾기 뒤 8틱은 다시 안 낸다.
  * 4틱(200ms) 넘게 멈추면 쌓인 거리를 버린다.
  * 착지: 떨어진 높이 0.9 넘으면 `land` · 0.2 넘으면 `land_light`(두 발) · 점프는 내 플레이어만(남의 점프는 동기화가 안 온다).
  * 웅크림이면 행동 이름 끝에 `_sneak`.
@@ -25,11 +25,11 @@ public final class StepTracker {
 	public static final double WANDER_MIN = 0.25;
 	/** 꺾기 문턱 — 이번 · 지난 틱 가로 움직임(칸/틱)의 내적(PF 0.001). */
 	public static final double TURN_DOT = 0.001;
-	/** 꺾기 각도 문턱 — cos 65° · 이보다 많이 어긋나면 꺾기. */
-	public static final double TURN_COS = Math.cos(Math.toRadians(65.0));
+	/** 꺾기 각도 문턱 — cos 90° · 이만큼 이상 어긋나면 꺾기(딱 90° 도 든다 — 비교에 작은 여유). */
+	public static final double TURN_COS = Math.cos(Math.toRadians(90.0)) + 1.0e-6;
 	/** 꺾기로 볼 가장 느린 가로 빠르기(칸/틱) — 웅크려 걷기(약 0.065)도 든다. */
 	public static final double TURN_SPEED = 0.05;
-	public static final int TURN_WINDOW = 5;
+	public static final int TURN_WINDOW = 3;
 	public static final int TURN_COOLDOWN = 8;
 	public static final double JUMP_DY = 0.1;
 	/** 제자리 점프로 보는 가로 속도(칸/틱) — 이보다 느리면 `wander` 두 발 · 빠르면 `jump` 한 발. */
@@ -250,7 +250,7 @@ public final class StepTracker {
 		return out;
 	}
 
-	/** 최근 5틱 안의 움직임과 65° 넘게 어긋났나 — 지금도 빠르기 문턱을 넘을 때만. */
+	/** 최근 3틱 안의 움직임과 90° 이상 어긋났나 — 지금도 빠르기 문턱을 넘을 때만. */
 	private boolean bent(double dx, double dz, double speed) {
 		if (speed <= TURN_SPEED) {
 			return false;
