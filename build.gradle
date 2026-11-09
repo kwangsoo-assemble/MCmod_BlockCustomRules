@@ -24,6 +24,8 @@ dependencies {
 	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
 	// Fabric API 는 클라 명령(/brr) 부분만 쓴다 — 프로필에 이미 깔린 것을 쓰고 jar 에 넣지 않는다
 	modImplementation fabricApi.module("fabric-command-api-v2", project.fabric_api_version)
+	// Sodium 사각면(QuadEmitter)을 받는 데만 — Sodium 이 쓰는 렌더러 API 라 Sodium 이 있을 때만 읽힌다
+	modCompileOnly fabricApi.module("fabric-renderer-api-v1", project.fabric_api_version)
 	modCompileOnly "com.terraformersmc:modmenu:${project.modmenu_version}"
 }
 

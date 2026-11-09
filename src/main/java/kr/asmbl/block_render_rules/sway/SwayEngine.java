@@ -1,26 +1,18 @@
 package kr.asmbl.block_render_rules.sway;
 
-import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import kr.asmbl.block_render_rules.config.BrrConfig;
 import kr.asmbl.block_render_rules.config.Rule;
-import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.client.renderer.ItemBlockRenderTypes;
-import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.block.BlockRenderDispatcher;
-import net.minecraft.client.renderer.block.model.BlockModelPart;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
@@ -28,25 +20,26 @@ import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.VoxelShape;
-import org.joml.Matrix4f;
 
 /**
- * 휘는 블록 — 매 프레임 판정(히트박스가 걸친 칸 · 미는 벡터 합 · 블렌딩) · 기울어 있는 동안만 청크에서 빼고 따로 그린다.
- * 상태는 렌더 스레드만 만진다. 청크 스레드와 나누는 것은 «청크에서 뺄 자리» 집합 하나뿐이다.
- * 두 칸 블록(긴 잔디 · 큰 꽃 · 긴 해초 — `DOUBLE_BLOCK_HALF`)은 아래 칸을 축으로 한 기둥으로 다룬다(Plan D18).
+ * 휘는 블록 — 매 프레임 판정(히트박스가 걸친 칸 · 미는 벡터 합 · 블렌딩) · 기울기가 바뀌면 그 청크 구역을 다시 짓게 하고,
+ * 청크를 지을 때 정점을 비튼다(바닐라 `SectionCompilerMixin` · Sodium `SodiumBlockRendererMixin`).
+ * 블록이 지형 메시에 남아 있어야 셰이더팩의 흔들림 · 그림자가 그 위에 더해진다(M56 🎬 — 따로 그리면 둘 다 빠졌다).
+ * 판정 · 블렌딩 상태는 렌더 스레드만 만진다. 청크 스레드와 나누는 것은 «자리 → 비틀기 값» 표 하나뿐이다.
+ * 두 칸 블록(긴 잔디 · 큰 꽃 · 긴 해초 — `DOUBLE_BLOCK_HALF`)은 아래 칸 바닥을 축으로 한 기둥으로 다룬다(Plan D18).
  */
 public final class SwayEngine {
 	/** 엔티티를 찾는 반지름(카메라에서 · 칸). */
 	private static final double RANGE = 8.0;
-	/** 세기 1.0 일 때 위끝이 밀리는 정도(tan 15°) — 🎬 에서 SWAY 1.0 과 맞춘다(Plan D11). */
+	/** 세기 1.0 일 때 블록 높이 1 당 옆으로 밀리는 양(tan 15°) — 🎬 에서 SWAY 1.0 과 맞춘다(Plan D11). */
 	private static final float SHEAR_PER_STRENGTH = 0.268F;
-	/** 기울기가 이보다 작고 목표가 0 이면 다시 청크로 돌려보낸다. */
+	/** 기울기가 이보다 작고 목표가 0 이면 똑바로 세우고 지운다. */
 	private static final double REST = 0.01;
-	/** 청크로 돌려보낸 뒤에도 따로 그리는 시간 — 청크가 다시 지어지기 전에 블록이 사라지지 않게(Plan D12 · R1). */
-	private static final long LINGER_NANOS = 200_000_000L;
+	/** 비틀기 값이 이만큼 바뀌어야 청크를 다시 짓는다(약 0.2°) — 너무 잦은 다시 짓기를 막는다. */
+	private static final float MARK_EPS = 0.003F;
 
-	/** 청크에서 뺄 자리(기둥이면 두 칸) — 청크 짓는 스레드가 읽는다. */
-	private static final Set<Long> HIDDEN = ConcurrentHashMap.newKeySet();
+	/** 자리(기둥이면 두 칸 각각) → {kx, kz, 기둥 안 높이(0 · 1)} — 청크 짓는 스레드가 읽는다. */
+	private static final Map<Long, float[]> SHEAR = new ConcurrentHashMap<>();
 	private static final Long2ObjectOpenHashMap<Tilt> TILTS = new Long2ObjectOpenHashMap<>();
 	private static final Long2ObjectOpenHashMap<double[]> SUMS = new Long2ObjectOpenHashMap<>();
 	private static final LongOpenHashSet SEEN = new LongOpenHashSet();
@@ -66,7 +59,8 @@ public final class SwayEngine {
 		double cz;
 		double tx;
 		double tz;
-		long lingerUntil; // 0 = 아직 청크에서 빠져 있다
+		float markedKx; // 청크에 마지막으로 넘긴 값
+		float markedKz;
 
 		Tilt(long anchor, int height) {
 			this.anchor = anchor;
@@ -74,11 +68,12 @@ public final class SwayEngine {
 		}
 	}
 
-	public static boolean isHidden(BlockPos pos) {
-		return !HIDDEN.isEmpty() && HIDDEN.contains(pos.asLong());
+	/** 청크 스레드 — 그 자리를 비틀 값 · 없으면 null. {kx, kz, 기둥 안 높이} */
+	public static float[] shear(BlockPos pos) {
+		return SHEAR.isEmpty() ? null : SHEAR.get(pos.asLong());
 	}
 
-	/** `renderLevel` 머리 — 판정 · 블렌딩 · 청크에서 빼고 넣기. */
+	/** `renderLevel` 머리 — 판정 · 블렌딩 · 바뀐 기둥만 청크 다시 짓기. */
 	public static void update() {
 		Minecraft mc = Minecraft.getInstance();
 		ClientLevel level = mc.level;
@@ -86,7 +81,7 @@ public final class SwayEngine {
 		if (level != lastLevel) {
 			// 월드 · 차원이 바뀌면 다 버린다 — 새 월드의 청크는 처음부터 지어진다
 			TILTS.clear();
-			HIDDEN.clear();
+			SHEAR.clear();
 			lastLevel = level;
 			lastNanos = now;
 		}
@@ -98,24 +93,19 @@ public final class SwayEngine {
 
 		collect(level, mc.gameRenderer.getMainCamera().getPosition());
 
-		double alpha = SwayMath.blendAlpha(dt, BrrConfig.blendSeconds());
 		for (Long2ObjectMap.Entry<double[]> e : SUMS.long2ObjectEntrySet()) {
 			Tilt t = TILTS.get(e.getLongKey());
 			double[] s = e.getValue();
 			if (t == null) {
 				t = new Tilt(e.getLongKey(), (int) s[3]);
 				TILTS.put(t.anchor, t);
-				hide(t, mc);
-			} else if (t.lingerUntil != 0L) {
-				// 돌려보내는 중에 다시 밀렸다
-				t.lingerUntil = 0L;
-				hide(t, mc);
 			}
 			SwayMath.target(s[0], s[1], s[2], TMP);
 			t.tx = TMP[0];
 			t.tz = TMP[1];
 		}
 
+		double alpha = SwayMath.blendAlpha(dt, BrrConfig.blendSeconds());
 		Iterator<Tilt> it = TILTS.values().iterator();
 		while (it.hasNext()) {
 			Tilt t = it.next();
@@ -123,24 +113,25 @@ public final class SwayEngine {
 				t.tx = 0.0;
 				t.tz = 0.0;
 			}
-			if (t.lingerUntil != 0L) {
-				if (now >= t.lingerUntil) {
-					it.remove();
-				}
-				continue;
-			}
 			t.cx += (t.tx - t.cx) * alpha;
 			t.cz += (t.tz - t.cz) * alpha;
 			boolean gone = !stillSways(level, t);
 			if (gone || (t.tx == 0.0 && t.tz == 0.0 && t.cx * t.cx + t.cz * t.cz < REST * REST)) {
-				t.cx = 0.0;
-				t.cz = 0.0;
-				unhide(t, mc);
-				if (gone) {
-					it.remove();
-				} else {
-					t.lingerUntil = now + LINGER_NANOS;
+				// 똑바로 세운 모습으로 한 번 더 짓고 지운다
+				clearShear(t);
+				markDirty(t, mc);
+				it.remove();
+				continue;
+			}
+			float kx = (float) t.cx * SHEAR_PER_STRENGTH;
+			float kz = (float) t.cz * SHEAR_PER_STRENGTH;
+			if (Math.abs(kx - t.markedKx) >= MARK_EPS || Math.abs(kz - t.markedKz) >= MARK_EPS) {
+				t.markedKx = kx;
+				t.markedKz = kz;
+				for (int i = 0; i < t.height; i++) {
+					SHEAR.put(BlockPos.offset(t.anchor, 0, i, 0), new float[] { kx, kz, i });
 				}
+				markDirty(t, mc);
 			}
 		}
 	}
@@ -213,18 +204,10 @@ public final class SwayEngine {
 		return r != null && r.sway() > 0.0F;
 	}
 
-	private static void hide(Tilt t, Minecraft mc) {
+	private static void clearShear(Tilt t) {
 		for (int i = 0; i < t.height; i++) {
-			HIDDEN.add(BlockPos.offset(t.anchor, 0, i, 0));
+			SHEAR.remove(BlockPos.offset(t.anchor, 0, i, 0));
 		}
-		markDirty(t, mc);
-	}
-
-	private static void unhide(Tilt t, Minecraft mc) {
-		for (int i = 0; i < t.height; i++) {
-			HIDDEN.remove(BlockPos.offset(t.anchor, 0, i, 0));
-		}
-		markDirty(t, mc);
 	}
 
 	/** Sodium 이 깔려 있으면 이 바닐라 메서드를 자기 다시 짓기로 받는다(Plan §0 ①). */
@@ -233,46 +216,5 @@ public final class SwayEngine {
 		int y = BlockPos.getY(t.anchor);
 		int z = BlockPos.getZ(t.anchor);
 		mc.levelRenderer.setBlocksDirty(x, y, z, x, y + t.height - 1, z);
-	}
-
-	/** `renderBlockEntities` 끝 — 기운 블록을 따로 그린다(피스톤 블록과 같은 계층 · 레벨을 줘 AO · 색 · 빛을 지형처럼). */
-	public static void render(MultiBufferSource.BufferSource buffers, Camera camera) {
-		if (TILTS.isEmpty()) {
-			return;
-		}
-		Minecraft mc = Minecraft.getInstance();
-		ClientLevel level = mc.level;
-		if (level == null) {
-			return;
-		}
-		BlockRenderDispatcher dispatcher = mc.getBlockRenderer();
-		Vec3 cam = camera.getPosition();
-		PoseStack ps = new PoseStack();
-		Matrix4f shear = new Matrix4f();
-		BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
-		for (Tilt t : TILTS.values()) {
-			int ax = BlockPos.getX(t.anchor);
-			int ay = BlockPos.getY(t.anchor);
-			int az = BlockPos.getZ(t.anchor);
-			// 아래 면은 고정 · 위로 갈수록 기운다 — x' = x + kx·y, z' = z + kz·y
-			shear.identity();
-			shear.m10((float) t.cx * SHEAR_PER_STRENGTH);
-			shear.m12((float) t.cz * SHEAR_PER_STRENGTH);
-			for (int i = 0; i < t.height; i++) {
-				pos.set(ax, ay + i, az);
-				BlockState state = level.getBlockState(pos);
-				if (state.isAir()) {
-					continue;
-				}
-				ps.pushPose();
-				ps.translate(ax - cam.x, ay - cam.y, az - cam.z);
-				ps.mulPose(shear);
-				ps.translate(0.0F, (float) i, 0.0F); // 위 칸은 기둥 축(아래 칸 바닥)에서 이어진다
-				VertexConsumer vc = buffers.getBuffer(ItemBlockRenderTypes.getMovingBlockRenderType(state));
-				List<BlockModelPart> parts = dispatcher.getBlockModel(state).collectParts(RandomSource.create(state.getSeed(pos)));
-				dispatcher.renderBatched(state, pos, level, ps, vc, false, parts);
-				ps.popPose();
-			}
-		}
 	}
 }
