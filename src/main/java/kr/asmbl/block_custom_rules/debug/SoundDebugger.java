@@ -61,8 +61,13 @@ public final class SoundDebugger {
 		CLIENT, PACKET, ENGINE
 	}
 
-	private record Entry(String[] lines, double x, double y, double z, int color, int generation, long created) {
+	private record Entry(String[] lines, double x, double y, double z, int color, int generation, long created, int stack) {
 	}
+
+	/** 글자 한 벌의 높이(칸) — 3줄 × 10px × 크기 0.02 + 틈. 같은 자리에 겹치면 이만큼씩 위로. */
+	private static final double STACK_STEP = 0.7;
+	/** 이 거리 안이면 «같은 자리» 로 본다(칸). */
+	private static final double STACK_NEAR = 0.75;
 
 	private static final ArrayDeque<Entry> ENTRIES = new ArrayDeque<>();
 	private static boolean on;
@@ -127,7 +132,21 @@ public final class SoundDebugger {
 			path = why == null ? "" : why;
 			color = origin == Origin.ENGINE ? YELLOW : WHITE;
 		}
-		ENTRIES.addLast(new Entry(new String[] { heard, where, path }, x, y, z, color, Generation.current(), System.nanoTime()));
+		// 같은 자리 근처에 아직 떠 있는 글자 — 겹침 걸음(위 블록 + 아래 먹먹) · 지나감처럼 한 걸음에 여럿이면 위로 쌓는다
+		long now = System.nanoTime();
+		int gen = Generation.current();
+		boolean[] used = new boolean[MAX_ENTRIES + 1];
+		for (Entry e : ENTRIES) {
+			if (e.generation == gen && now - e.created <= LIFE && e.stack <= MAX_ENTRIES
+					&& (e.x - x) * (e.x - x) + (e.y - y) * (e.y - y) + (e.z - z) * (e.z - z) < STACK_NEAR * STACK_NEAR) {
+				used[e.stack] = true;
+			}
+		}
+		int stack = 0;
+		while (stack < MAX_ENTRIES && used[stack]) {
+			stack++;
+		}
+		ENTRIES.addLast(new Entry(new String[] { heard, where, path }, x, y, z, color, gen, now, stack));
 		while (ENTRIES.size() > MAX_ENTRIES) {
 			ENTRIES.removeFirst();
 		}
@@ -189,7 +208,7 @@ public final class SoundDebugger {
 			float life = 1.0F - (float) (now - e.created) / LIFE;
 			int alpha = Math.max(0x30, (int) (255 * life));
 			ps.pushPose();
-			ps.translate(dx, dy + 0.6, dz);
+			ps.translate(dx, dy + 0.6 + e.stack * STACK_STEP, dz);
 			ps.mulPose(ctx.camera().rotation());
 			ps.scale(0.02F, -0.02F, 0.02F);
 			Matrix4f m = ps.last().pose();
