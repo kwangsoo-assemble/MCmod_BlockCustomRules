@@ -9,4 +9,4 @@ pluginManagement {
 	}
 }
 
-rootProject.name = 'cull_pass'
+rootProject.name = 'block_render_rules'

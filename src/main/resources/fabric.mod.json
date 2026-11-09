@@ -1,9 +1,9 @@
 {
 	"schemaVersion": 1,
-	"id": "cull_pass",
+	"id": "block_render_rules",
 	"version": "${version}",
-	"name": "Cull Pass",
-	"description": "Blocks you list stop hiding the faces of the blocks next to them — e.g. a transparent-looking snow layer no longer leaves a hole in the floor under it.",
+	"name": "Block Render Rules",
+	"description": "Per-block render rules: how a block's texture is drawn (solid / cutout / translucent), whether it hides its neighbours' faces, and how much it sways when entities brush through it.",
 	"authors": [
 		"kwangsoo"
 	],
@@ -12,22 +12,27 @@
 	"environment": "client",
 	"entrypoints": {
 		"client": [
-			"kr.asmbl.cull_pass.CullPassClient"
+			"kr.asmbl.block_render_rules.BrrClient"
 		],
 		"modmenu": [
-			"kr.asmbl.cull_pass.CullPassModMenu"
+			"kr.asmbl.block_render_rules.screen.BrrModMenu"
 		]
 	},
 	"mixins": [
 		{
-			"config": "cull_pass.mixins.json",
+			"config": "block_render_rules.mixins.json",
 			"environment": "client"
 		}
 	],
 	"depends": {
 		"fabricloader": ">=0.19.3",
 		"minecraft": "~1.21.8",
-		"java": ">=21"
+		"java": ">=21",
+		"fabric-command-api-v2": "*"
+	},
+	"breaks": {
+		"cull_pass": "*",
+		"sway": "*"
 	},
 	"suggests": {
 		"modmenu": "*"

@@ -1,10 +1,14 @@
 {
 	"required": true,
 	"minVersion": "0.8",
-	"package": "kr.asmbl.cull_pass.mixin",
+	"package": "kr.asmbl.block_render_rules.mixin",
 	"compatibilityLevel": "JAVA_21",
 	"client": [
 		"BlockFaceMixin",
+		"ChunkRenderTypeMixin",
+		"LevelRendererMixin",
+		"SectionCompilerMixin",
+		"SodiumBlockRendererMixin",
 		"SodiumOcclusionMixin"
 	],
 	"injectors": {

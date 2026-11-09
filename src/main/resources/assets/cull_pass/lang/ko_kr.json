@@ -1,8 +1,0 @@
-{
-	"cull_pass.title": "Cull Pass",
-	"cull_pass.blocks": "블록 ID",
-	"cull_pass.help": "목록의 블록은 옆 블록의 면을 가리지 않습니다.",
-	"cull_pass.help2": "블록 ID 를 쉼표로 나눠 적습니다(예: minecraft:snow).",
-	"cull_pass.add_target": "바라보던 블록 추가",
-	"cull_pass.unknown": "없는 블록(무시함): %s"
-}
