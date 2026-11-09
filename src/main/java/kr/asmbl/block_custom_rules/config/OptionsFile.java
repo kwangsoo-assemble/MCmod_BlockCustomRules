@@ -189,6 +189,11 @@ public final class OptionsFile {
 		return out;
 	}
 
+	/** JSON 줄 하나를 화면 줄로(설정 화면 «모드 옵션으로 복사»). */
+	public static Line lineFrom(JsonElement e) {
+		return toLine(e);
+	}
+
 	private static Line toLine(JsonElement e) {
 		if (!e.isJsonObject() || !isString(e.getAsJsonObject().get("target"))) {
 			Line l = new Line(e.toString());

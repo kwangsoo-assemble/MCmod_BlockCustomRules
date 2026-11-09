@@ -230,7 +230,7 @@ public final class RuleFile {
 				problems.warn(origin, path, "bcr.problem.no_fields");
 				continue;
 			}
-			out.add(new RuleLine(target, values, origin, path));
+			out.add(new RuleLine(target, values, origin, path, r.get("target")));
 		}
 	}
 }

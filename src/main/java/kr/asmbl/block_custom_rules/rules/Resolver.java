@@ -37,6 +37,7 @@ public final class Resolver {
 		Map<StateView, Object[]> values = new HashMap<>();
 		Map<StateView, Provenance[]> from = new HashMap<>();
 		Collection<String> allBlocks = null;
+		Map<RuleLine, List<StateView>> matched = new java.util.IdentityHashMap<>();
 		for (RuleFile f : files) {
 			TagView view = groups.view(f.origin.layer());
 			for (RuleLine line : f.rules) {
@@ -59,11 +60,14 @@ public final class Resolver {
 					}
 					blocks = allBlocks;
 				}
+				List<StateView> hit = new ArrayList<>();
+				matched.put(line, hit);
 				for (String block : blocks) {
 					for (StateView s : catalog.states(block)) {
 						if (!line.target().test(s, view)) {
 							continue;
 						}
+						hit.add(s);
 						Object[] v = values.computeIfAbsent(s, x -> new Object[n]);
 						Provenance[] p = from.computeIfAbsent(s, x -> new Provenance[n]);
 						for (int j = 0; j < k; j++) {
@@ -78,6 +82,6 @@ public final class Resolver {
 		for (Map.Entry<StateView, Object[]> e : values.entrySet()) {
 			out.put(e.getKey(), new Resolved(e.getValue(), from.get(e.getKey())));
 		}
-		return new RuleTable(out, files, groups);
+		return new RuleTable(out, files, groups, matched);
 	}
 }
