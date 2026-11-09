@@ -60,5 +60,9 @@
 	"bcr.toast.body": "Rule files: %s errors, %s warnings — /bcr check",
 	"bcr.problem.io": "Could not read the file: %s",
 	"bcr.problem.bad_value.sway_blend_seconds": "sway_blend_seconds must be a number from 0 to 5: %s",
-	"bcr.problem.bad_value.problem_toast": "problem_toast must be true or false: %s"
+	"bcr.problem.bad_value.problem_toast": "problem_toast must be true or false: %s",
+	"bcr.problem.bad_value.footsteps": "footsteps must be true or false: %s",
+	"bcr.problem.bad_action": "Not a valid action name: %s",
+	"bcr.problem.bad_value.action": "An action entry must be {\"parent\": \"action\"} or {\"parent\": null}: %s",
+	"bcr.problem.category_cycle": "Sound category %s is its own parent through a loop — the loop is cut."
 }

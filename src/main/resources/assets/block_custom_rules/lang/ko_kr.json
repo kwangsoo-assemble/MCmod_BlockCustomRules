@@ -60,5 +60,9 @@
 	"bcr.toast.body": "규칙 파일 오류 %s · 경고 %s — /bcr check",
 	"bcr.problem.io": "파일을 못 읽었습니다: %s",
 	"bcr.problem.bad_value.sway_blend_seconds": "sway_blend_seconds 는 0 ~ 5 의 수입니다: %s",
-	"bcr.problem.bad_value.problem_toast": "problem_toast 는 true · false 중 하나입니다: %s"
+	"bcr.problem.bad_value.problem_toast": "problem_toast 는 true · false 중 하나입니다: %s",
+	"bcr.problem.bad_value.footsteps": "footsteps 는 true · false 중 하나입니다: %s",
+	"bcr.problem.bad_action": "행동 이름 꼴이 아닙니다: %s",
+	"bcr.problem.bad_value.action": "행동 줄은 {\"parent\": \"행동\"} 또는 {\"parent\": null} 꼴입니다: %s",
+	"bcr.problem.category_cycle": "소리 종류 %s 의 부모가 돌고 돌아 자기에게 옵니다 — 그 고리는 끊습니다."
 }

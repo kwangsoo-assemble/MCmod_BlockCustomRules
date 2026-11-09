@@ -1,0 +1,13 @@
+{
+	"_comment": "주인 확인 별칭 — 블록 이름(같음 · 끝말 · 앞말 · 가운데 말)과 소리 종류 · 세트 소리로 못 잇는 것만. 블록 → 그 블록이 내는 소리 가운데 이름들.",
+	"minecraft:bee_nest": ["beehive"],
+	"minecraft:budding_amethyst": ["amethyst_block"],
+	"minecraft:cave_vines_plant": ["cave_vines"],
+	"minecraft:redstone_wall_torch": ["redstone_torch"],
+	"minecraft:piston_head": ["piston"],
+	"minecraft:moving_piston": ["piston"],
+	"minecraft:nether_portal": ["portal"],
+	"minecraft:soul_fire": ["fire"],
+	"minecraft:tripwire_hook": ["tripwire"],
+	"minecraft:dropper": ["dispenser"]
+}

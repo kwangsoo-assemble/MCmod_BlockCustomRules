@@ -5,11 +5,22 @@
 	"compatibilityLevel": "JAVA_21",
 	"client": [
 		"BlockFaceMixin",
+		"ButtonTypeAccess",
 		"ChunkRenderTypeMixin",
+		"ClientLevelSoundMixin",
+		"EntityStepSoundMixin",
+		"FallSoundMixin",
+		"HitSoundMixin",
+		"LevelEventSoundMixin",
 		"LevelRendererMixin",
+		"PacketSoundMixin",
+		"PlaceSoundMixin",
+		"PressurePlateTypeAccess",
 		"SectionCompilerMixin",
 		"SodiumBlockRendererMixin",
-		"SodiumOcclusionMixin"
+		"SodiumOcclusionMixin",
+		"TrapDoorTypeAccess",
+		"WoodTypeAccess"
 	],
 	"injectors": {
 		"defaultRequire": 0
