@@ -8,7 +8,8 @@ import java.util.Map;
  * 엔티티 하나의 걸음 판정(D25 · D26) — 틱마다 위치 · 상태를 받아 «무슨 행동을 몇 발로» 를 낸다. 마인크래프트 클래스를 모른다.
  * 간격은 «걸은 칸 × 0.6»(바닐라 `moveDist` 단위)을 쌓아 넘을 때마다: 걷기 0.95 · 계단 오름 0.6175 · 사다리 0.5 · 계단 내림은 바로.
  * 넘친 만큼은 다음 걸음으로 넘긴다 — 평균 간격이 바닐라(1 · 약 1.67칸)의 0.95배(약 1.58칸)가 된다.
- * 4틱(200ms) 넘게 멈추면 쌓인 거리를 버리고, 조금이라도 걸었으면 `wander` 한 발.
+ * 꺾기 · 멈춤(PF): 이번 틱 · 지난 틱 가로 움직임의 내적이 0.001 아래로 떨어지는 순간 `wander` 한 발(90° 넘게 꺾거나 멈출 때).
+ * 4틱(200ms) 넘게 멈추면 쌓인 거리를 버린다.
  * 착지: 떨어진 높이 0.9 넘으면 `land` · 0.2 넘으면 `land_light`(두 발) · 점프는 내 플레이어만(남의 점프는 동기화가 안 온다).
  * 웅크림이면 행동 이름 끝에 `_sneak`.
  */
@@ -21,6 +22,8 @@ public final class StepTracker {
 	public static final double LAND_LIGHT = 0.2;
 	public static final int STILL_TICKS = 4;
 	public static final double WANDER_MIN = 0.25;
+	/** 꺾기 문턱 — 이번 · 지난 틱 가로 움직임(칸/틱)의 내적(PF 0.001). */
+	public static final double TURN_DOT = 0.001;
 	public static final double JUMP_DY = 0.1;
 	/** 제자리 점프로 보는 가로 속도(칸/틱) — 이보다 느리면 `wander` 두 발 · 빠르면 `jump` 한 발. */
 	public static final double JUMP_IN_PLACE = 0.05;
@@ -96,6 +99,10 @@ public final class StepTracker {
 	private boolean grounded;
 	private int still;
 	private boolean rightFoot;
+	private double pdx;
+	private double pdz;
+	/** 내적이 문턱 아래인 상태 — 처음엔 «아래» 로 둬 첫 움직임에서 안 난다. */
+	private boolean turnLow = true;
 
 	/** 다음 한 발이 오른발인가 — 부를 때마다 바뀐다. */
 	public boolean nextFoot() {
@@ -129,6 +136,15 @@ public final class StepTracker {
 		double horiz = Math.sqrt(dx * dx + dz * dz);
 		boolean nowGrounded = in.onGround || in.climbing;
 		String sneak = in.sneaking ? "_sneak" : "";
+		// 꺾기 · 멈춤 — 내적이 문턱 아래로 «들어가는» 틱에만(서 있는 동안은 계속 아래라 다시 안 난다)
+		boolean low = dx * this.pdx + dz * this.pdz < TURN_DOT;
+		boolean turn = low && !this.turnLow;
+		this.turnLow = low;
+		this.pdx = dx;
+		this.pdz = dz;
+		if (turn && in.onGround && this.grounded) {
+			out.add(new Event("wander" + sneak, 1, in.sprinting, in.y));
+		}
 
 		if (!nowGrounded) {
 			if (this.grounded) {
@@ -191,9 +207,7 @@ public final class StepTracker {
 		if (moved < 1.0e-4) {
 			this.still++;
 			if (this.still == STILL_TICKS) {
-				if (this.acc >= WANDER_MIN) {
-					out.add(new Event("wander" + sneak, 1, in.sprinting, in.y));
-				}
+				// 멈춤 소리는 위 꺾기 판정이 멈추는 순간 이미 냈다(PF) — 여기선 쌓인 거리만 버린다
 				this.acc = 0.0;
 				this.stepY = in.y;
 				this.standTicks = standDelay();
