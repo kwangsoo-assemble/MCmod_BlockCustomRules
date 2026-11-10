@@ -330,17 +330,21 @@ public final class FootstepEngine {
 	/**
 	 * 0.2칸보다 얇은 받침(바닥 다락문 0.1875 · 중계기 0.125 등) — 발 높이 0.2칸 아래 칸을 보면 그 받침을 건너뛰어
 	 * 아래 칸(공기면 무음)을 밟는다. 그 위 칸 블록의 충돌 윗면이 발 높이 이하면 그 블록이 땅이다.
-	 * 겹침 블록(카펫 · 눈) · `step_as: ground` 규칙은 아래 땅과 겹쳐 내야 하니 여기서 빼고 원래 길로.
+	 * 겹침 블록(카펫 · 눈) · `step_as: ground` 규칙은 아래 땅과 겹쳐 내야 하니 원래 길로 — 아래가 공기면 겹칠 땅이 없어
+	 * 그 블록이 땅(PF 도 허공 카펫 소리를 낸다).
 	 */
 	private static Foot thinSupport(ClientLevel level, BlockPos gp, double y) {
 		BlockPos up = gp.above();
 		BlockState s = level.getBlockState(up);
-		if (s.isAir() || s.getSoundType() == SoundType.EMPTY || VanillaSteps.combination(s.getBlock()) || VanillaSteps.inside(s.getBlock())) {
+		if (s.isAir() || s.getSoundType() == SoundType.EMPTY || VanillaSteps.inside(s.getBlock())) {
 			return null;
 		}
 		Resolved r = Rules.get(s);
-		if (r != null && r.stepAsGround()) {
-			return null;
+		if (VanillaSteps.combination(s.getBlock()) || (r != null && r.stepAsGround())) {
+			BlockState below = level.getBlockState(gp);
+			if (!below.isAir() && below.getSoundType() != SoundType.EMPTY) {
+				return null;
+			}
 		}
 		net.minecraft.world.phys.shapes.VoxelShape shape = s.getCollisionShape(level, up);
 		if (shape.isEmpty() || up.getY() + shape.max(net.minecraft.core.Direction.Axis.Y) > y + 1.0e-3) {
