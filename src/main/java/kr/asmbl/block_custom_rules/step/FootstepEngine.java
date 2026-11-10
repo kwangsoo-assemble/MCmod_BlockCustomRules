@@ -292,6 +292,10 @@ public final class FootstepEngine {
 		if (!level.hasChunkAt(gp)) {
 			return null;
 		}
+		Foot thin = thinSupport(level, gp, y);
+		if (thin != null) {
+			return thin;
+		}
 		BlockState ground = level.getBlockState(gp);
 		if (ground.isAir() || ground.getSoundType() == SoundType.EMPTY) {
 			gp = Math.abs(y - p.getY()) < 1.0e-6 ? p.getOnPosLegacy() : BlockPos.containing(p.getX(), y - 0.2, p.getZ());
@@ -321,6 +325,28 @@ public final class FootstepEngine {
 			return new Foot(ground, null, feet, ground, gp);
 		}
 		return new Foot(ground, null, null, ground, gp);
+	}
+
+	/**
+	 * 0.2칸보다 얇은 받침(바닥 다락문 0.1875 · 중계기 0.125 등) — 발 높이 0.2칸 아래 칸을 보면 그 받침을 건너뛰어
+	 * 아래 칸(공기면 무음)을 밟는다. 그 위 칸 블록의 충돌 윗면이 발 높이 이하면 그 블록이 땅이다.
+	 * 겹침 블록(카펫 · 눈) · `step_as: ground` 규칙은 아래 땅과 겹쳐 내야 하니 여기서 빼고 원래 길로.
+	 */
+	private static Foot thinSupport(ClientLevel level, BlockPos gp, double y) {
+		BlockPos up = gp.above();
+		BlockState s = level.getBlockState(up);
+		if (s.isAir() || s.getSoundType() == SoundType.EMPTY || VanillaSteps.combination(s.getBlock()) || VanillaSteps.inside(s.getBlock())) {
+			return null;
+		}
+		Resolved r = Rules.get(s);
+		if (r != null && r.stepAsGround()) {
+			return null;
+		}
+		net.minecraft.world.phys.shapes.VoxelShape shape = s.getCollisionShape(level, up);
+		if (shape.isEmpty() || up.getY() + shape.max(net.minecraft.core.Direction.Axis.Y) > y + 1.0e-3) {
+			return null;
+		}
+		return new Foot(s, null, null, s, up);
 	}
 
 	/** 발 하나 — 땅(또는 겹침 위) · 겹침 아래 · 지나감 · 섞기 줄의 더하기. 그 걸음의 섞기 결과를 돌려준다(종소리가 같이 쓴다). */
