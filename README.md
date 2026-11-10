@@ -10,7 +10,7 @@
 
 | Item | Value |
 |---|---|
-| Version | `3.0.0` |
+| Version | `3.1.0` |
 | Target | Minecraft 1.21.8 · Fabric · **client only** |
 | Requires | Fabric Loader 0.19.3+ · Java 21 · Fabric API (command · lifecycle events · resource loader · rendering) |
 | Works with | Sodium 0.7.x (same result when Sodium renders terrain) · Iris (shader pack waving and shadows are added on top of sway) · Mod Menu (settings screen) |
@@ -175,6 +175,7 @@ The mod plays footsteps for players and mobs itself (within 16 blocks of the cam
 |---|---|
 | `/bcr check` | problems in rule files (file · JSON path · reason) |
 | `/bcr rule <block>` | the final rule for that block and the source that won each field |
+| `/bcr get_blocks_from_tags <#tag>` | the **final block list** of a tag — server tag with every pack / mod-option `groups` override applied · which files redefined it (replaces · appends) · tag names autocomplete |
 | `/bcr sound names <category>` | sound names per action for that category and what each resolves to |
 | `/bcr sound template <category>` | a `sounds.json` template for that category — names not defined yet, filled with the sound you hear now |
 | `/bcr debug sound [on [radius] [blocks\|all\|blocked] \| off]` | in-world sound debugger — three lines of text at each sound (what · which path · why) · radius 32 by default, 64 at most |
@@ -219,7 +220,7 @@ Server sounds from the `master` · `ui` · `music` sources are not changed eithe
 ```bash
 # JDK 21
 ./gradlew build
-# → build/libs/block_custom_rules-3.0.0.jar
+# → build/libs/block_custom_rules-3.1.0.jar
 ```
 
 ## Credits · license
@@ -242,7 +243,7 @@ No code was copied from either mod; it was written from scratch.
 
 | 항목 | 값 |
 |---|---|
-| 버전 | `3.0.0` |
+| 버전 | `3.1.0` |
 | 타깃 | Minecraft 1.21.8 · Fabric · **클라이언트 전용** |
 | 의존 | Fabric Loader 0.19.3+ · Java 21 · Fabric API(명령 · 생명 주기 이벤트 · 리소스 로더 · 렌더링) |
 | 함께 쓰면 | Sodium 0.7.x(지형을 Sodium 이 그릴 때도 같게) · Iris(셰이더팩 흔들림 · 그림자가 휘기 위에 더해진다) · Mod Menu(설정 화면) |
@@ -407,6 +408,7 @@ minecraft:block.stone.step  →  <종류 이름공간>:block.<종류>.step
 |---|---|
 | `/bcr check` | 규칙 파일 문제(파일 · JSON 경로 · 까닭) |
 | `/bcr rule <블록>` | 그 블록의 최종 규칙과 칸마다 이긴 출처 |
+| `/bcr get_blocks_from_tags <#태그>` | 서버 태그 위에 리팩 · 모드 옵션 `groups` 재정의를 다 반영한 **최종 블록 목록** · 다시 정의한 파일(통째로 대신 · 덧붙임) · 태그 이름 자동완성 |
 | `/bcr sound names <종류>` | 그 종류의 행동별 소리 이름과 찾은 결과 |
 | `/bcr sound template <종류>` | 그 종류의 리팩 `sounds.json` 틀 — 아직 없는 이름을 지금 들리는 소리로 채운 꼴 |
 | `/bcr debug sound [on [반지름] [blocks\|all\|blocked] \| off]` | 월드 소리 디버거 — 소리 자리에 글자 3줄(무슨 소리 · 어느 길 · 왜) · 반지름 기본 32 · 최대 64 |
@@ -451,7 +453,7 @@ minecraft:block.stone.step  →  <종류 이름공간>:block.<종류>.step
 ```bash
 # JDK 21
 ./gradlew build
-# → build/libs/block_custom_rules-3.0.0.jar
+# → build/libs/block_custom_rules-3.1.0.jar
 ```
 
 ## 출처 · 라이선스

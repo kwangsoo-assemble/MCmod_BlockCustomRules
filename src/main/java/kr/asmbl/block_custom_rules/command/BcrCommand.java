@@ -42,11 +42,13 @@ import net.minecraft.world.phys.HitResult;
  * 클라 명령 `/bcr`(D38) — 응답은 친 사람 채팅에만 뜬다(클라 명령 · 일부러 치는 진단 명령).
  * `reload` 모드 옵션 다시 읽기(리팩은 F3 + T) · `check` 규칙 문제 · `rule [블록 상태]` 최종 규칙과 출처(없으면 바라보는 블록) ·
  * `debug sound [on [반지름 [blocks|all|blocked]] | off]`(인자 없으면 켜고 끄기) · `sound names <종류>` 행동마다 찾아지는 이름 ·
- * `sound template <종류>` `sounds.json` 뼈대를 클립보드로.
+ * `sound template <종류>` `sounds.json` 뼈대를 클립보드로 · `get_blocks_from_tags <#태그>` 최종 블록 묶음(서버 태그 › 리팩 › 모드 옵션 재정의).
  */
 public final class BcrCommand {
 	/** `check` 가 채팅에 보이는 최대 줄 — 나머지는 로그에. */
 	private static final int CHECK_LINES = 30;
+	/** `get_blocks_from_tags` 한 줄에 보일 블록 수. */
+	private static final int TAG_LINE = 12;
 
 	private BcrCommand() {
 	}
@@ -55,6 +57,8 @@ public final class BcrCommand {
 		ClientCommandRegistrationCallback.EVENT.register((dispatcher, ctx) -> dispatcher.register(literal("bcr")
 			.then(literal("reload").executes(BcrCommand::reload))
 			.then(literal("check").executes(BcrCommand::check))
+			.then(literal("get_blocks_from_tags").then(argument("tag", StringArgumentType.greedyString())
+				.suggests(BcrCommand::tagSuggest).executes(BcrCommand::blocksFromTag)))
 			.then(literal("rule")
 				.executes(c -> rule(c, lookedAt()))
 				.then(argument("block", BlockStateArgument.block(ctx))
@@ -72,6 +76,58 @@ public final class BcrCommand {
 			.then(literal("sound")
 				.then(literal("names").then(category().executes(BcrCommand::names)))
 				.then(literal("template").then(category().executes(BcrCommand::template))))));
+	}
+
+	/** 블록 태그 이름 — 서버 태그 + 리팩 · 모드 옵션 `groups`(블록) · `#ns:이름` 꼴. */
+	private static java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> tagSuggest(CommandContext<FabricClientCommandSource> c,
+			com.mojang.brigadier.suggestion.SuggestionsBuilder b) {
+		Set<String> ids = new TreeSet<>();
+		try {
+			BuiltInRegistries.BLOCK.getTags().forEach(n -> ids.add("#" + n.key().location()));
+		} catch (RuntimeException e) {
+			// 접속 전 · 태그가 아직 안 묶였다 — 리팩 묶음만
+		}
+		for (String g : Rules.snapshot().table.groupNames(kr.asmbl.block_custom_rules.rules.Registry.BLOCK)) {
+			ids.add("#" + g);
+		}
+		return SharedSuggestionProvider.suggest(ids, b);
+	}
+
+	/** 맨 위 층(모드 옵션)에서 본 블록 묶음 구성원 — 서버 태그 위에 리팩 · 모드 옵션 `groups` 재정의를 다 접은 것. */
+	private static int blocksFromTag(CommandContext<FabricClientCommandSource> c) {
+		String raw = StringArgumentType.getString(c, "tag").trim();
+		String id = raw.startsWith("#") ? raw.substring(1) : raw;
+		ResourceLocation rl = id.isEmpty() ? null : ResourceLocation.tryParse(id);
+		if (rl == null) {
+			c.getSource().sendError(Component.translatable("bcr.cmd.tag_bad"));
+			return 0;
+		}
+		String tag = rl.toString();
+		kr.asmbl.block_custom_rules.rules.Registry reg = kr.asmbl.block_custom_rules.rules.Registry.BLOCK;
+		Rules.Snapshot snap = Rules.snapshot();
+		Set<String> members = snap.table.tags(snap.optionsLayer).members(reg, tag);
+		if (members == null) {
+			c.getSource().sendFeedback(Component.translatable("bcr.cmd.tag_none", "#" + tag,
+					Component.translatable(Rules.tagsReady() ? "bcr.cmd.tags_ready" : "bcr.cmd.tags_not_ready")));
+			return 0;
+		}
+		boolean server;
+		try {
+			server = BuiltInRegistries.BLOCK.get(net.minecraft.tags.TagKey.create(net.minecraft.core.registries.Registries.BLOCK, rl)).isPresent();
+		} catch (RuntimeException e) {
+			server = false;
+		}
+		java.util.List<String> sorted = new java.util.ArrayList<>(new TreeSet<>(members));
+		c.getSource().sendFeedback(Component.translatable("bcr.cmd.tag_head", "#" + tag, sorted.size()));
+		c.getSource().sendFeedback(Component.translatable(server ? "bcr.cmd.tag_server" : "bcr.cmd.tag_no_server").withStyle(ChatFormatting.GRAY));
+		for (kr.asmbl.block_custom_rules.rules.GroupDef d : snap.table.groupDefs(reg, tag)) {
+			c.getSource().sendFeedback(Component.translatable("bcr.cmd.tag_def", d.origin().describe(),
+					Component.translatable(d.replace() ? "bcr.cmd.tag_replace" : "bcr.cmd.tag_append"), d.values().size()).withStyle(ChatFormatting.GRAY));
+		}
+		for (int i = 0; i < sorted.size(); i += TAG_LINE) {
+			c.getSource().sendFeedback(Component.literal(" " + String.join(", ", sorted.subList(i, Math.min(sorted.size(), i + TAG_LINE)))));
+		}
+		return 1;
 	}
 
 	/** 소리 종류 인자 — 리팩 · 모드 옵션에 나오는 종류를 제안한다. */

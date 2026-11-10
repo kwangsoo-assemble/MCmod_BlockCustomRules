@@ -38,6 +38,22 @@ public final class Groups {
 		}
 	}
 
+	/** 이 이름을 정의한 `groups` 줄 — 아래 층부터 · 파일 차례(명령이 «누가 다시 정의했나» 를 보인다). */
+	public synchronized List<GroupDef> definitions(Registry registry, String tag) {
+		return List.copyOf(this.defs.getOrDefault(new Name(registry, tag), List.of()));
+	}
+
+	/** 리팩 · 모드 옵션이 정의한 묶음 이름(`#` 뺀 것). */
+	public synchronized Set<String> names(Registry registry) {
+		Set<String> out = new java.util.TreeSet<>();
+		for (Name n : this.defs.keySet()) {
+			if (n.registry() == registry) {
+				out.add(n.tag());
+			}
+		}
+		return out;
+	}
+
 	/** 층 하나에서 보이는 태그 창(같은 층이면 같은 창). */
 	public synchronized TagView view(int layer) {
 		return this.views.computeIfAbsent(layer, l -> (registry, tag) -> members(registry, tag, l));

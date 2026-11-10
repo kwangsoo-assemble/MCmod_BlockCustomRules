@@ -54,6 +54,16 @@ public final class RuleTable {
 		return l == null ? List.of() : l;
 	}
 
+	/** 그 묶음 이름을 정의한 `groups` 줄(아래 층부터) · 없으면 빈 목록. */
+	public List<GroupDef> groupDefs(Registry registry, String tag) {
+		return this.groups == null ? List.of() : this.groups.definitions(registry, tag);
+	}
+
+	/** 리팩 · 모드 옵션이 정의한 묶음 이름(`#` 뺀 것). */
+	public java.util.Set<String> groupNames(Registry registry) {
+		return this.groups == null ? java.util.Set.of() : this.groups.names(registry);
+	}
+
 	/** 층 하나에서 본 태그 창 — 소리 조건 등 나중 칸이 같은 C안으로 본다. 빈 표면 아무 태그도 없다. */
 	public TagView tags(int layer) {
 		return this.groups == null ? (registry, tag) -> null : this.groups.view(layer);
