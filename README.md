@@ -1,267 +1,463 @@
-# MCmod_BlockRenderRules
+# MCmod_BlockCustomRules
 
-**[한국어](#한국어)** 설명은 아래에 있습니다.
+> A Fabric client mod that sets per-block **render rules** and **sound rules** from resource packs (Minecraft 1.21.8).
+> On top of texture draw mode, face culling and sway, it groups blocks into "sound categories" to change step, break and place sounds, and plays footsteps itself (it replaces Presence Footsteps).
 
-> A Fabric client mod (Minecraft 1.21.8) that sets **render rules per block**:
-> how a block's texture is drawn (solid · cutout · translucent), whether it stops hiding its neighbours' faces (cull pass), and how much it sways when entities brush through it.
-
-> This mod was written with an AI coding assistant (Claude Code) and checked by the maintainer in real use.
-> It succeeds Cull Pass 1.0 (the old repository name `MCmod_CullPass` redirects here).
+> This mod was written with an AI coding tool (Claude Code) and verified in real use by the maintainer.
+> It continues Block Render Rules 2.0 (the old repository name `MCmod_BlockRenderRules` moves to this repository).
 
 ## At a glance
 
 | Item | Value |
 |---|---|
-| Version | `2.0.0` |
+| Version | `3.0.0` |
 | Target | Minecraft 1.21.8 · Fabric · **client only** |
-| Requires | Fabric Loader 0.19.3+ · Java 21 · Fabric API (for the `/brr` client command) |
-| Works with | Sodium 0.7.x (same result when Sodium builds the terrain) · Iris (shader-pack waving and shadows stack on top of the sway) · Mod Menu (options screen) |
-| Do not install together | the old `cull_pass` / `sway` jars — they would do the same work twice, so the game refuses to start (`breaks`) |
+| Requires | Fabric Loader 0.19.3+ · Java 21 · Fabric API (command · lifecycle events · resource loader · rendering) |
+| Works with | Sodium 0.7.x (same result when Sodium renders terrain) · Iris (shader pack waving and shadows are added on top of sway) · Mod Menu (settings screen) |
+| Do not install together | `block_render_rules` · `cull_pass` · `sway` · `presencefootsteps` — they would do the same work twice, so the game refuses to start (`breaks`) |
 
 ## What it does
 
-### 1. Texture mode
+The mod ships no rules of its own. Rule files in **resource packs** and the **mod options** file decide the rules per block.
+With no rules at all it behaves almost exactly like vanilla (footsteps sound like vanilla too).
 
-Vanilla fills in the transparent and semi-transparent pixels of every block that is not grass, a flower, stained glass and the like,
-so a resource pack alone cannot make "translucent bricks" or "a gold block with holes". This mod lets you choose the mode per block.
+### ① Texture draw mode · face culling · sway
 
-| Mode | Effect |
+| Field | Effect |
 |---|---|
-| `default` | whatever vanilla (and the shader pack) decides |
-| `solid` | fills in transparent pixels |
-| `cutout` | transparent pixels are cut out, no translucency (grass / flower style) · no mipmaps, so holes stay sharp at a distance |
-| `translucent` | alpha is blended (stained-glass style) |
+| `render` | `default` (vanilla / shader pack as is) · `solid` (fills transparent pixels) · `cutout` (transparent pixels cut out, no translucency, no mipmaps) · `translucent` (blends alpha as is) |
+| `cull_pass` | When on, the block does not hide the faces of its neighbours — so you can see past translucent bricks · faces between two of the same block use the normal check |
+| `sway` | 0 – 5 · when an entity enters the block cell the block leans away and slowly stands back up when it leaves · strength 1.0 ≈ 0.27 blocks per 1 block of height (about 15°) |
 
-- Vanilla and Sodium chunks, block items in hand and on the ground, block displays, and blocks moved by pistons or falling all follow the rule
-- The block's shape, collision, light and server-side block do not change — **only how it looks**
-- If a shader pack assigns a layer to the same block via `layer.*` in `block.properties`, this mod's rule wins
+- The draw mode applies to vanilla and Sodium chunks, held and dropped block items, block displays, and moving (piston / falling) blocks · shape, collision and light are unchanged
+- It wins over a shader pack's `layer.*` entries in `block.properties`
+- Sway starts as soon as an entity's hitbox touches the block cell · several entities add their push · spectators and zero-width hitboxes do not push
+- Two-tall blocks (tall grass, large fern, tall flowers, tall seagrass, pitcher plant) lean as one stem around the bottom of the lower half
+- Sway bends vertices inside the terrain mesh — shader pack waving and shadows are added on top
 
-### 2. Cull pass
+### ② Sound categories
 
-Whether a face is drawn is decided by **the neighbour's occlusion shape**, not by the block's model or layer.
-So even if bricks are drawn translucent, the stone next to them still drops the face toward the bricks and you see a hole through them.
-A block with cull pass on stops hiding its neighbours' faces. Faces between two blocks of the same kind keep the original rule (the inside faces of a translucent brick wall are not drawn).
+Giving a block a `sound_category` changes the names of that block's sounds.
 
-### 3. Sway
+```
+minecraft:block.stone.step  →  <category namespace>:block.<category>.step
+```
 
-When an entity (spectators excepted) enters the block's cell, the block leans away from it and slowly straightens after it leaves.
+- Steps, breaking, placing, hitting, falling and block-specific sounds (bells, doors opening, …) all take the same path · `item.*` sounds are not touched
+- If the new name does not exist in any pack, it tries the action parent (e.g. `run` → `step`) and the category parent in turn, and finally plays the **original vanilla sound**
+- When a name is found, volume and pitch come from the pack definition · sounds played by this mod are capped at volume 3
 
-- **Hitbox based** — it counts as soon as a corner of the hitbox touches the block, even if the hitbox centre is outside. The overlap rectangle seen from above gives the direction (away from where it came in) and the strength (overlap area)
-- **Several entities are summed as vectors** — pushing from opposite sides leaves the block almost upright
-- **Blending** — the tilt approaches its target over time (`sway_blend_seconds`, default 0.25 s). Near the block centre the strength shrinks instead of the direction flipping, so crossing the centre does not snap it over
-- **Two-block plants** (tall grass, large fern, tall flowers such as sunflowers, tall seagrass, pitcher plant) lean as one stalk around the bottom of the lower half
-- The bottom face stays put and the top is pushed the most. Strength 1.0 is about 0.27 blocks per block of height (about 15°)
-- Vertices are bent inside the terrain mesh — so **shader-pack waving and shadows still apply on top of the sway**. While a tilt changes, that chunk section is rebuilt
+### ③ Footstep engine
 
-## Settings
+The mod plays footsteps for players and mobs itself (within 16 blocks of the camera · at most 50 · players first).
 
-### Config file `config/block_render_rules.json`
+- One step every 0.95 blocks walked · separate rules for stairs and ladders · each left and right foot looks at its own block
+- Actions: `step` · `run` · `wander` (stopping, turning) · `jump` · `land` · `land_light` (both feet) · `climb` · `stairs_up` · `stairs_down` · `crawl` · `stand` (now and then while standing) · `<action>_sneak` while sneaking
+- Extra sounds: `through` (walking through a non-colliding block in the foot cell — grass and the like) · `enter` · `exit` (when the foot cell's sound category changes) · overlay blocks such as carpets and snow layers play both the top (`top`) and the block below (`bottom`)
+- Thin supports such as bottom trapdoors and carpets are stepped on as themselves (even when placed over air)
+- Footwear: the equip sound name of the feet item is used as a category — if a pack defines that category, boots get their own sound
+- Mobs: the same mob-specific sounds as vanilla · four-legged (`quadruped`) rhythm · size scaling (`size_scaling`)
+- Other players' step packets from the server are blocked so they do not double up with the sounds this mod plays
+
+## Rule files
+
+### Locations and layers
+
+| Layer (bottom → top) | Location |
+|---|---|
+| Server tags | groups (`#tag`) only |
+| Resource packs | `assets/<namespace>/block_custom_rules/*.json` — in pack order (the upper pack wins) · files inside a pack by name |
+| Mod options | `config/block_custom_rules.json` |
+
+- Reloaded when packs are toggled, on F3 + T, on server `/reload`, and on join
+- Every field keeps its source (layer · pack · file · JSON path), so commands and the settings screen can show which line won
+
+### Format
 
 ```json
 {
-  "sway_blend_seconds": 0.25,
-  "blocks": {
-    "minecraft:petrified_oak_slab": { "render": "default", "cull_pass": true, "sway": 0.0 },
-    "minecraft:cobweb": { "render": "default", "cull_pass": false, "sway": 1.0 },
-    "minecraft:heavy_weighted_pressure_plate": { "render": "default", "cull_pass": false, "sway": 1.5 },
-    "minecraft:bricks": { "render": "translucent", "cull_pass": true, "sway": 0.0 }
+  "format": 1,
+  "groups": { "mypack:soft": { "values": ["minecraft:white_wool", "#minecraft:wool_carpets"] } },
+  "rules": [
+    { "target": "#mypack:soft", "sound_category": "mypack:cloth" },
+    { "target": "minecraft:cobweb", "sway": 1.0, "sound_category": "minecraft:chain" },
+    { "target": "minecraft:bricks", "render": "translucent", "cull_pass": true },
+    { "target": { "blocks": "minecraft:wheat", "state": { "age": { "min": 4, "max": 7 } } }, "sway": 1.5 }
+  ],
+  "sound": {
+    "defaults": { "volume": [0.9, 1.0], "pitch": [0.95, 1.05] },
+    "categories": { "mypack:cloth": { "parent": "minecraft:wool" } },
+    "actions": { "run_sneak": { "parent": "run" } },
+    "layers": {
+      "mypack:block.cloth.land": [
+        { "sound": "mypack:cloth_soft", "volume": [0.6, 0.8] },
+        { "include": "mypack:block.cloth.step", "delay_ms": 50, "chance": 0.5 }
+      ]
+    },
+    "mix": [
+      { "when": { "entity": "minecraft:player" }, "volume": { "*": 0.7, "through": 0.35 } },
+      { "when": { "footwear": true }, "volume": { "through": 0 } },
+      { "when": { "weather": { "raining": true }, "location": { "can_see_sky": true } }, "add": ["mypack:wet"] }
+    ],
+    "entities": [ { "target": "minecraft:cow", "locomotion": "quadruped", "size_scaling": true } ]
   }
 }
 ```
 
-- The first three entries are the defaults (the bricks entry is an example). Missing fields mean `default` · `false` · `0`
-- `sway` is 0 to 5 (0 = no sway) · `sway_blend_seconds` is 0 to 5 (0 = follow immediately)
-- An ID without a namespace (`snow`) means `minecraft:` · unknown IDs are ignored
-- If the file cannot be read (a typo while editing by hand), it is not overwritten and the previous settings stay in use
-- ⚠ The defaults are used only when there is no config file — an existing file is left alone
+### Order — only two kinds
 
-### Options screen (Mod Menu)
+| Kind | Fields | Order |
+|---|---|---|
+| List fields | `rules` · `mix` · `entities` | per value field, **the later line and the upper layer win** · a field you leave out means no rule · `"default"` resets |
+| Named fields | `groups` · `categories` · `actions` · `layers` · `defaults` | for the same name, the upper layer / later file **replaces it entirely** · only `groups` can append with `"replace": false` |
 
-One row per block — mode button (click to cycle) · cull pass on / off · sway strength (− / +, steps of 0.5) · delete.
-Add a block by typing its ID or with "Looked-at block" for the block you were aiming at. The sway blend time is also set here.
-Switching a block to cutout or translucent for the first time turns cull pass on (you can turn it off). "Done" saves and redraws the chunks.
+### Block conditions (`target` · the slots in `mix.when`)
 
-### Client command `/brr`
+- Command-style string: `"minecraft:oak_stairs[half=top]"` · `"#minecraft:logs"` · `"*"`
+- Range form: `{ "blocks": "minecraft:wheat", "state": { "age": { "min": 4, "max": 7 } } }`
+- Combinations: `{ "any_of": [ … ] }` · `{ "all_of": [ … ] }` · `{ "not": … }`
+- A group with `"registry": "biome"` becomes a biome group
+
+### `rules` fields
+
+| Field | Value |
+|---|---|
+| `render` | `default` · `solid` · `cutout` · `translucent` |
+| `cull_pass` | `true` · `false` |
+| `sway` | 0 – 5 |
+| `sound_category` | category name (`ns:name`) |
+| `step_as` | `"ground"` — treat the thin block in the foot cell as the ground, and also play the block below it as `bottom` |
+
+### `sound` fields
+
+| Field | Effect |
+|---|---|
+| `defaults` | volume / pitch ranges for `layers` lines that do not set them |
+| `categories` | per category: `parent` (category to inherit missing names from) · `footsteps: false` (silent footsteps) · `actions` (action parents within that category) |
+| `actions` | override global action parents · defaults: `run` · `wander` · `land` → `step`, `jump` → `wander`, `<action>_sneak` → silent |
+| `layers` | one sound name as several lines — each line is `sound` (a name from the pack's `sounds.json`) or `include` (pull in another name) · `volume` · `pitch` (ranges) · `delay_ms` (up to 1000) · `chance` · `chance` on an `include` line rolls once for the whole group |
+| `mix` | when the slots and situation in `when` match the step, multiply `volume` · `pitch` · `delay_ms` per channel, or play `<name>.<action>` as well with `add` |
+| `entities` | per entity: `locomotion` (`biped` · `quadruped` · `none` = not handled by this mod) · `size_scaling` |
+
+- "One of several" is chosen by weights in the pack's `sounds.json` (several files under one name)
+- `mix.when` conditions: block per slot (`ground` · `top` · `bottom` · `through` · `enter` · `exit`) · `footwear` · `entity` · `location` (vanilla location predicate form — biome · dimension · light · fluid · `can_see_sky` · `precipitation`) · `weather` · `time` · `action` · `sneak` · an empty `when` always matches
+- `mix` channels: `ground` · `top` · `bottom` · `through` · `enter` · `exit` · `footwear` · `chime` (amethyst chime) · `mob` (a mob's vanilla footstep) · `*` (every channel)
+- Built-in default mix (packs override it): with footwear, ground × 0.5 and through / enter / exit off · overlay block top × 0.15 · below × 0.05
+- ⚠ `structures` in `location` is rejected, because the client cannot know it
+
+## Mod options `config/block_custom_rules.json`
+
+```json
+{
+  "format": 1,
+  "options": { "sway_blend_seconds": 0.25, "problem_toast": false },
+  "rules": [
+    { "target": "minecraft:petrified_oak_slab", "cull_pass": true }
+  ]
+}
+```
+
+- Same format as a pack rule file, and the top layer · only `options` is extra
+- `sway_blend_seconds` — time for the lean to reach its target (0 – 5 s · 0 = instant)
+- `problem_toast` — show a toast on join when rule files have problems (off by default)
+- If the file cannot be read (a hand edit went wrong), it is not overwritten and the previous settings stay in use
+
+## Settings screen (Mod Menu)
+
+- Five tabs: rules · sound categories · layers · mix · entities
+- Top: edit mod option lines — target · sway · draw mode · culling · sound category · ↑↓ order · invalid text turns red at once
+- Bottom: browse the pack layers — the upper pack wins · `[+]` expands conditions, covered fields and reasons · single-block lines can be "copied to mod options"
+- Also opens from the title screen (tag and biome conditions show as "not joined")
+
+## Command `/bcr`
 
 | Command | Effect |
 |---|---|
-| `/brr list` | list the rules |
-| `/brr set <block> render <default\|solid\|cutout\|translucent>` | texture mode |
-| `/brr set <block> cull <on\|off>` | cull pass |
-| `/brr set <block> sway <0 to 5>` | sway strength |
-| `/brr remove <block>` | remove from the list |
-| `/brr blend <seconds>` | sway blend time |
-| `/brr reload` | re-read the file |
+| `/bcr check` | problems in rule files (file · JSON path · reason) |
+| `/bcr rule <block>` | the final rule for that block and the source that won each field |
+| `/bcr sound names <category>` | sound names per action for that category and what each resolves to |
+| `/bcr sound template <category>` | a `sounds.json` template for that category — names not defined yet, filled with the sound you hear now |
+| `/bcr debug sound [on [radius] [blocks\|all\|blocked] \| off]` | in-world sound debugger — three lines of text at each sound (what · which path · why) · radius 32 by default, 64 at most |
+| `/bcr reload` | reload the mod options file (packs: F3 + T) |
 
-Replies appear only in the chat of the player who ran the command.
+Replies and debugger text only appear on the screen of the player who ran the command.
 
-## Moving from the old mods
+## Protecting server-side cue sounds — marker seed
 
-Once, when there is no config file, it reads the old `config/cull_pass.json` (cull pass list) and `config/sway.json` (block → strength) and carries them over. The old files are not deleted.
-Remove the old `cull_pass-*.jar` and `sway-*.jar` from the mods folder — if they are still there, the game tells you to remove them and does not start.
+A server can keep this mod from changing sounds it plays on purpose.
+If the top 16 bits of the sound seed are `0x5EED`, this mod neither replaces nor blocks that sound.
+The low 48 bits are still used to pick the file like vanilla, so the sound stays random as before.
+Server sounds from the `master` · `ui` · `music` sources are not changed either.
 
-## Known limitations
+## Moving over
 
-- With shaders off, the lighting of a tilted block looks a little off (it looks natural with shaders on)
-- Stacks of the same block (sugar cane, bamboo) and hanging vines lean cell by cell
-- Only visible on clients that have the mod — install it on the other PCs too if their view should match
-- ⚠ The Sodium side relies on Sodium internals (`BlockOcclusionCache.shouldDrawSide` · `BlockRenderer.renderModel` · `processQuad`) — check them again after a Sodium update
+- Remove the old `block_render_rules` · `cull_pass` · `sway` · `presencefootsteps` jars from the mods folder — if they are present, the game tells you to remove them and does not start
+- The old `config/block_render_rules.json` is not read (nor deleted) — move the rules into a pack or the new mod options file
+
+## Known limits
+
+- With shaders off, lighting on leaning blocks looks a little off (it looks natural with shaders on)
+- Columns of the same block (sugar cane, bamboo) and hanging vines lean cell by cell
+- Only visible and audible on clients that have the mod — install it on other PCs for the same result there
+- Other players' jumps are not sent by the server, so they make no footstep
+- ⚠ The Sodium side relies on Sodium internals (`BlockOcclusionCache.shouldDrawSide` · `BlockRenderer.renderModel` · `processQuad`) — recheck after upgrading Sodium
 
 ## Files
 
-| File | What |
+| Folder | What |
 |---|---|
-| `config/BrrConfig.java` · `Rule.java` · `Render.java` · `Migration.java` | reading / writing the config · carrying over old settings |
-| `mixin/ChunkRenderTypeMixin.java` | texture mode — wraps `ItemBlockRenderTypes.getChunkRenderType` and `getMovingBlockRenderType` |
-| `mixin/BlockFaceMixin.java` · `SodiumOcclusionMixin.java` | cull pass — vanilla and Sodium face checks |
-| `sway/SwayMath.java` · `SwayEngine.java` | sway hit test · vector sum · blending |
-| `mixin/SectionCompilerMixin.java` · `SodiumBlockRendererMixin.java` | sway — bending vertices while vanilla and Sodium build chunks |
-| `screen/BrrScreen.java` · `command/BrrCommand.java` | options screen · `/brr` |
+| `rules/` · `config/` | reading rule files · conditions · layering · sources · mod options |
+| `sound/` | sound categories · name lookup · `layers` · `mix` · server packet decisions |
+| `step/` | footstep engine — step tracking · foot blocks · mobs · delay queue |
+| `sway/` · `track/` | sway · entity tracking |
+| `mixin/` | render · culling · sway · sound hooks |
+| `screen/` · `command/` · `debug/` | settings screen · `/bcr` · sound debugger |
+| `world/` · `game/` | clean-up on world change · game-side lookups |
 
 ## Build
 
 ```bash
 # JDK 21
 ./gradlew build
-# → build/libs/block_render_rules-2.0.0.jar
+# → build/libs/block_custom_rules-3.0.0.jar
 ```
 
-## Credits · License
+## Credits · license
 
-The idea of tilting blocks by entity position comes from [SWAY](https://github.com/RazorPlay01/SWAY) by RazorPlay01. No code was copied; it was written from scratch.
+The idea of leaning blocks by entity position came from [SWAY](https://github.com/RazorPlay01/SWAY) (RazorPlay01).
+The footstep ideas — actions, extra sounds and mixing — came from [Presence Footsteps](https://github.com/Sollace/Presence-Footsteps) (Sollace · MIT).
+No code was copied from either mod; it was written from scratch.
 
 **MIT** (`LICENSE`).
 
----
-
 # 한국어
 
-> 블록마다 **그리는 규칙**을 정하는 Fabric 클라이언트 모드다 (Minecraft 1.21.8).
-> 텍스처를 어떻게 그릴지(불투명 · 투명 허용 · 반투명 허용), 옆 블록의 면을 가리지 않을지(컬링 패스), 엔티티가 지나갈 때 얼마나 휠지(휘기)를 블록 하나하나에 정한다.
+> 블록마다 **그리는 규칙**과 **소리 규칙**을 리소스팩으로 정하는 Fabric 클라이언트 모드다 (Minecraft 1.21.8).
+> 텍스처 방식 · 컬링 패스 · 휘기에 더해, 블록을 «소리 종류» 로 묶어 걸음 · 부수기 · 놓기 소리를 바꾸고, 발소리를 직접 낸다(Presence Footsteps 를 대신한다).
 
 > 이 모드는 AI 코딩 도구(Claude Code)로 작성했고 유지보수자가 실제 사용으로 확인했다.
-> Cull Pass 1.0 을 이어받은 모드다(옛 저장소 이름 `MCmod_CullPass` 는 이 저장소로 넘어온다).
+> Block Render Rules 2.0 을 이어받은 모드다(옛 저장소 이름 `MCmod_BlockRenderRules` 는 이 저장소로 넘어온다).
 
 ## 한눈에
 
 | 항목 | 값 |
 |---|---|
-| 버전 | `2.0.0` |
+| 버전 | `3.0.0` |
 | 타깃 | Minecraft 1.21.8 · Fabric · **클라이언트 전용** |
-| 의존 | Fabric Loader 0.19.3+ · Java 21 · Fabric API(클라 명령 `/brr` 부분) |
-| 함께 쓰면 | Sodium 0.7.x(지형을 Sodium 이 그릴 때도 같게) · Iris(셰이더팩 흔들림 · 그림자가 휘기 위에 더해진다) · Mod Menu(옵션 화면) |
-| 같이 깔면 안 되는 것 | 옛 `cull_pass` · `sway` jar — 같은 일을 두 번 해서 게임이 켜지지 않게 막아 두었다(`breaks`) |
+| 의존 | Fabric Loader 0.19.3+ · Java 21 · Fabric API(명령 · 생명 주기 이벤트 · 리소스 로더 · 렌더링) |
+| 함께 쓰면 | Sodium 0.7.x(지형을 Sodium 이 그릴 때도 같게) · Iris(셰이더팩 흔들림 · 그림자가 휘기 위에 더해진다) · Mod Menu(설정 화면) |
+| 같이 깔면 안 되는 것 | `block_render_rules` · `cull_pass` · `sway` · `presencefootsteps` — 같은 일을 두 번 해서 게임이 켜지지 않게 막아 두었다(`breaks`) |
 
 ## 하는 일
 
-### ① 텍스처 방식
+모드에는 규칙이 들어 있지 않다. **리소스팩**의 규칙 파일과 **모드 옵션** 파일이 블록마다 규칙을 정한다.
+규칙이 하나도 없으면 바닐라와 거의 같게 동작한다(발소리도 바닐라처럼 낸다).
 
-바닐라는 잔디 · 꽃 · 색유리 같은 블록이 아니면 텍스처의 투명 · 반투명 픽셀을 메워 그린다.
-그래서 리소스팩만으로는 «반투명한 벽돌» · «구멍 뚫린 금 블록» 을 만들 수 없다. 이 모드는 블록마다 그리는 방식을 고르게 한다.
+### ① 텍스처 방식 · 컬링 패스 · 휘기
 
-| 방식 | 하는 일 |
+| 칸 | 하는 일 |
 |---|---|
-| `default` | 바닐라(와 셰이더팩)가 정한 그대로 |
-| `solid` | 투명 픽셀까지 메워 그린다 |
-| `cutout` | 투명 픽셀은 뚫고 반투명은 없다(잔디 · 꽃 꼴) · 밉맵을 쓰지 않아 멀리서도 구멍이 또렷하다 |
-| `translucent` | 알파를 그대로 섞는다(색유리 꼴) |
+| `render` | `default`(바닐라 · 셰이더팩 그대로) · `solid`(투명 픽셀까지 메움) · `cutout`(투명은 뚫고 반투명 없음 · 밉맵 안 씀) · `translucent`(알파 그대로 섞음) |
+| `cull_pass` | 켜면 그 블록이 옆 블록의 면을 가리지 않는다 — 반투명 벽돌 너머가 뚫려 보이지 않게 · 같은 블록끼리 맞닿은 면은 원래 판정 |
+| `sway` | 0 ~ 5 · 엔티티가 블록 칸에 들어오면 반대쪽으로 기울고 떠나면 서서히 선다 · 세기 1.0 은 높이 1 당 약 0.27칸(약 15°) |
 
-- 바닐라 · Sodium 청크, 손 · 바닥의 블록 아이템, 블록 디스플레이, 피스톤으로 움직이는 블록 · 떨어지는 블록이 모두 따른다
-- 블록의 모양 · 충돌 · 빛 · 서버 쪽 블록은 바뀌지 않는다 — **보이는 방식만** 바뀐다
-- 셰이더팩이 `block.properties` 의 `layer.*` 로 같은 블록의 계층을 정해도 이 모드 규칙이 이긴다
+- 텍스처 방식은 바닐라 · Sodium 청크, 손 · 바닥의 블록 아이템, 블록 디스플레이, 피스톤 · 떨어지는 블록이 모두 따른다 · 모양 · 충돌 · 빛은 그대로다
+- 셰이더팩이 `block.properties` 의 `layer.*` 로 계층을 정해도 이 모드 규칙이 이긴다
+- 휘기는 히트박스가 블록 칸에 닿으면 들어간다 · 여러 엔티티는 미는 힘을 더한다 · 관전자 · 히트박스 폭 0 은 안 민다
+- 두 칸 블록(긴 잔디 · 큰 고사리 · 큰 꽃 · 긴 해초 · 벌레잡이풀)은 아래 칸 바닥을 축으로 한 줄기처럼 기운다
+- 휘기는 지형 메시 안에서 정점을 비튼다 — 셰이더팩의 흔들림 · 그림자가 그 위에 더해진다
 
-### ② 컬링 패스
+### ② 소리 종류
 
-블록 면을 그릴지는 그 블록의 모델 · 계층이 아니라 **옆 블록의 가림 모양**이 정한다.
-그래서 벽돌을 반투명으로 그려도 옆 돌은 벽돌 쪽 면을 지우고, 벽돌 너머가 뚫려 보인다.
-컬링 패스를 켠 블록은 옆 블록의 면을 가리지 않는다. 같은 블록끼리 맞닿은 면은 원래 판정 그대로다(반투명 벽돌 벽 안쪽 면은 안 그린다).
+블록에 `sound_category` 를 주면 그 블록의 소리 이름이 바뀐다.
 
-### ③ 휘기
+```
+minecraft:block.stone.step  →  <종류 이름공간>:block.<종류>.step
+```
 
-엔티티(관전자는 빼고)가 블록 칸에 들어오면 블록이 엔티티 반대쪽으로 기울고, 떠나면 서서히 선다.
+- 걸음 · 부수기 · 놓기 · 때리기 · 떨어짐과 블록 고유 소리(종소리 · 문 열기 등)가 모두 같은 길을 탄다 · `item.*` 소리는 안 건드린다
+- 바뀐 이름이 리팩에 없으면 행동 부모(예 `run` → `step`) · 종류 부모를 차례로 찾고, 끝내 없으면 **원래 바닐라 소리**를 그대로 낸다
+- 이름을 찾으면 음량 · 높낮이는 리팩 정의대로 낸다 · 이 모드가 내는 소리의 음량 상한은 3
 
-- **히트박스로 판정한다** — 히트박스 중심이 블록 밖이어도 모서리만 닿으면 들어간다. 위에서 본 «겹친 사각형» 으로 방향(들어온 쪽의 반대)과 세기(겹친 넓이)를 낸다
-- **여러 엔티티는 벡터 합** — 엔티티마다 미는 벡터를 더한다. 양쪽에서 같이 밀면 거의 똑바로 선다
-- **블렌딩** — 기울기는 목표 쪽으로 시간을 두고 다가간다(`sway_blend_seconds` · 기본 0.25초). 블록 중심 근처에서는 방향 대신 세기가 줄어, 중심을 지나도 확 뒤집히지 않는다
-- **두 칸 블록**(긴 잔디 · 큰 고사리 · 해바라기 같은 큰 꽃 · 긴 해초 · 벌레잡이풀)은 아래 칸 바닥을 축으로 한 줄기처럼 기운다
-- 아래 면은 고정되고 위로 갈수록 밀린다. 세기 1.0 은 높이 1 당 약 0.27칸(약 15°)
-- 지형 메시 안에서 정점을 비튼다 — 그래서 **셰이더팩의 흔들림 · 그림자가 휘기 위에 그대로 더해진다**. 기울기가 바뀌는 동안 그 청크 구역을 다시 짓는다
+### ③ 발소리 엔진
 
-## 설정
+플레이어와 몹의 발소리를 이 모드가 직접 낸다(카메라 16칸 안 · 최대 50 · 플레이어 먼저).
 
-### 설정 파일 `config/block_render_rules.json`
+- 간격 0.95칸(걸은 거리 기준) · 계단 · 사다리는 따로 · 왼발 · 오른발마다 발밑 블록을 따로 본다
+- 행동: `step` · `run` · `wander`(멈춤 · 방향 꺾기) · `jump` · `land` · `land_light`(두 발) · `climb` · `stairs_up` · `stairs_down` · `crawl` · `stand`(멈춘 채 가끔) · 웅크리면 `<행동>_sneak`
+- 덧소리: `through`(발 칸의 충돌 없는 블록을 지나감 — 풀숲 등) · `enter` · `exit`(발 칸의 소리 종류가 바뀔 때) · 카펫 · 눈 층 같은 겹침 블록은 위(`top`) · 아래(`bottom`) 둘 다
+- 바닥 다락문 · 카펫처럼 얇은 받침도 그 블록을 밟는다(허공에 놓였어도)
+- 신발: 발 칸 아이템의 장착 소리 이름을 종류로 쓴다 — 리팩이 그 종류를 정의하면 신발 소리가 난다
+- 몹: 바닐라와 같은 몹 고유 소리 · 네 발(`quadruped`) 박자 · 크기 배율(`size_scaling`)
+- 서버가 보내는 남의 걸음 패킷은 이 모드가 낸 소리와 겹치지 않게 막는다
+
+## 규칙 파일
+
+### 자리 · 층
+
+| 층 (아래 → 위) | 자리 |
+|---|---|
+| 서버 태그 | 묶음(`#태그`)만 |
+| 리소스팩 | `assets/<이름공간>/block_custom_rules/*.json` — 팩 차례대로(위 팩이 이김) · 팩 안은 파일 이름 순 |
+| 모드 옵션 | `config/block_custom_rules.json` |
+
+- 리팩을 켜고 끄거나 F3 + T · 서버 `/reload` · 접속 때 다시 읽는다
+- 칸마다 출처(층 · 팩 · 파일 · JSON 경로)를 들고 있어 «어느 줄이 이겼나» 를 명령 · 설정 화면으로 볼 수 있다
+
+### 꼴
 
 ```json
 {
-  "sway_blend_seconds": 0.25,
-  "blocks": {
-    "minecraft:petrified_oak_slab": { "render": "default", "cull_pass": true, "sway": 0.0 },
-    "minecraft:cobweb": { "render": "default", "cull_pass": false, "sway": 1.0 },
-    "minecraft:heavy_weighted_pressure_plate": { "render": "default", "cull_pass": false, "sway": 1.5 },
-    "minecraft:bricks": { "render": "translucent", "cull_pass": true, "sway": 0.0 }
+  "format": 1,
+  "groups": { "mypack:soft": { "values": ["minecraft:white_wool", "#minecraft:wool_carpets"] } },
+  "rules": [
+    { "target": "#mypack:soft", "sound_category": "mypack:cloth" },
+    { "target": "minecraft:cobweb", "sway": 1.0, "sound_category": "minecraft:chain" },
+    { "target": "minecraft:bricks", "render": "translucent", "cull_pass": true },
+    { "target": { "blocks": "minecraft:wheat", "state": { "age": { "min": 4, "max": 7 } } }, "sway": 1.5 }
+  ],
+  "sound": {
+    "defaults": { "volume": [0.9, 1.0], "pitch": [0.95, 1.05] },
+    "categories": { "mypack:cloth": { "parent": "minecraft:wool" } },
+    "actions": { "run_sneak": { "parent": "run" } },
+    "layers": {
+      "mypack:block.cloth.land": [
+        { "sound": "mypack:cloth_soft", "volume": [0.6, 0.8] },
+        { "include": "mypack:block.cloth.step", "delay_ms": 50, "chance": 0.5 }
+      ]
+    },
+    "mix": [
+      { "when": { "entity": "minecraft:player" }, "volume": { "*": 0.7, "through": 0.35 } },
+      { "when": { "footwear": true }, "volume": { "through": 0 } },
+      { "when": { "weather": { "raining": true }, "location": { "can_see_sky": true } }, "add": ["mypack:wet"] }
+    ],
+    "entities": [ { "target": "minecraft:cow", "locomotion": "quadruped", "size_scaling": true } ]
   }
 }
 ```
 
-- 위 앞의 세 줄이 처음 기본값이다(마지막 벽돌 줄은 보기). 빠진 칸은 `default` · `false` · `0`
-- `sway` 는 0 ~ 5(0 이면 안 휜다) · `sway_blend_seconds` 는 0 ~ 5(0 이면 바로 따라간다)
-- 이름공간을 빼면(`snow`) `minecraft:` 로 친다 · 없는 ID 는 무시한다
+### 차례 — 두 꼴뿐
+
+| 꼴 | 칸 | 차례 |
+|---|---|---|
+| 목록 칸 | `rules` · `mix` · `entities` | 값 칸마다 **나중 줄 · 위 층이 이긴다** · 안 적은 칸은 규칙 없음 · `"default"` 는 되돌림 |
+| 이름표 칸 | `groups` · `categories` · `actions` · `layers` · `defaults` | 같은 이름이면 위 층 · 나중 파일이 **통째로 대신**한다 · `groups` 만 `"replace": false` 로 덧붙인다 |
+
+### 블록 조건 (`target` · `mix.when` 의 자리)
+
+- 명령 꼴 글자: `"minecraft:oak_stairs[half=top]"` · `"#minecraft:logs"` · `"*"`
+- 범위 꼴: `{ "blocks": "minecraft:wheat", "state": { "age": { "min": 4, "max": 7 } } }`
+- 조합: `{ "any_of": [ … ] }` · `{ "all_of": [ … ] }` · `{ "not": … }`
+- `groups` 에 `"registry": "biome"` 를 주면 바이옴 묶음이 된다
+
+### `rules` 칸
+
+| 칸 | 값 |
+|---|---|
+| `render` | `default` · `solid` · `cutout` · `translucent` |
+| `cull_pass` | `true` · `false` |
+| `sway` | 0 ~ 5 |
+| `sound_category` | 종류 이름(`ns:이름`) |
+| `step_as` | `"ground"` — 발 칸의 얇은 블록을 땅으로 치고, 그 아래 블록을 `bottom` 으로 같이 낸다 |
+
+### `sound` 칸
+
+| 칸 | 하는 일 |
+|---|---|
+| `defaults` | `layers` 줄에 음량 · 높낮이를 안 적었을 때의 범위 |
+| `categories` | 종류마다 `parent`(못 찾은 이름을 물려받을 종류) · `footsteps: false`(발소리 무음) · `actions`(그 종류 안 행동 부모) |
+| `actions` | 전역 행동 부모 덮기 · 기본은 `run` · `wander` · `land` → `step`, `jump` → `wander`, `<행동>_sneak` → 무음 |
+| `layers` | 소리 이름 하나를 여러 줄로 — 줄마다 `sound`(리팩 `sounds.json` 이름) 또는 `include`(다른 이름 끌어오기) · `volume` · `pitch`(범위) · `delay_ms`(최대 1000) · `chance` · `include` 줄의 `chance` 는 묶음 한 번 굴리기 |
+| `mix` | 그 걸음에 겹친 자리 · 상황 조건(`when`)이 맞으면 채널마다 `volume` · `pitch` · `delay_ms` 를 곱하거나 · `add` 로 `<이름>.<행동>` 을 더 튼다 |
+| `entities` | 엔티티마다 `locomotion`(`biped` · `quadruped` · `none` = 이 모드가 안 맡음) · `size_scaling` |
+
+- «여럿 중 하나» 는 리팩 `sounds.json` 의 가중치로 고른다(이름 하나에 파일 여럿)
+- `mix.when` 의 조건: 자리별 블록(`ground` · `top` · `bottom` · `through` · `enter` · `exit`) · `footwear` · `entity` · `location`(바닐라 위치 조건 꼴 — 바이옴 · 차원 · 빛 · 유체 · `can_see_sky` · `precipitation`) · `weather` · `time` · `action` · `sneak` · 빈 `when` 은 언제나
+- `mix` 채널: `ground` · `top` · `bottom` · `through` · `enter` · `exit` · `footwear` · `chime`(자수정 종소리) · `mob`(몹의 바닐라 발소리) · `*`(모든 채널)
+- 모드 안 기본 섞기(리팩이 덮는다): 신발이면 땅 × 0.5 · 지나감 · 입장 · 퇴장 끔 · 겹침 블록 위 × 0.15 · 아래 × 0.05
+- ⚠ `location` 의 `structures` 는 클라이언트가 알 수 없어 거부한다
+
+## 모드 옵션 `config/block_custom_rules.json`
+
+```json
+{
+  "format": 1,
+  "options": { "sway_blend_seconds": 0.25, "problem_toast": false },
+  "rules": [
+    { "target": "minecraft:petrified_oak_slab", "cull_pass": true }
+  ]
+}
+```
+
+- 리팩 규칙 파일과 같은 꼴이고 맨 위 층이다 · `options` 만 더 있다
+- `sway_blend_seconds` — 기울기가 목표로 다가가는 시간(0 ~ 5초 · 0 이면 바로)
+- `problem_toast` — 접속할 때 규칙 문제가 있으면 토스트로 알릴지(기본 끔)
 - 파일을 못 읽으면(손으로 고치다 틀림) 덮어쓰지 않고 직전 설정을 그대로 쓴다
-- ⚠ 기본값은 설정 파일이 없을 때만 쓰인다 — 이미 있는 파일은 그대로다
 
-### 옵션 화면 (Mod Menu)
+## 설정 화면 (Mod Menu)
 
-블록마다 한 줄 — 방식 버튼(눌러서 돌린다) · 컬링 패스 켬 / 끔 · 휘기 세기(− / +, 0.5 칸) · 지우기.
-아래에서 블록 ID 를 적어 넣거나 «바라보는 블록» 으로 조준하던 블록을 넣는다. 휘기 블렌딩 초도 여기서 바꾼다.
-방식을 투명 · 반투명으로 처음 바꾸면 컬링 패스가 저절로 켜진다(끌 수 있다). «완료» 를 누르면 저장하고 청크를 다시 그린다.
+- 탭 다섯: 규칙 · 소리 종류 · 겹 소리 · 섞기 · 엔티티
+- 위: 모드 옵션 줄을 고친다 — 대상 · 휘기 · 텍스처 방식 · 컬링 · 소리 종류 · ↑↓ 차례 · 틀린 글자는 바로 빨강
+- 아래: 리팩 층을 조회한다 — 위 팩이 이긴다 · `[+]` 로 조건 · 덮인 칸 · 이유를 펼친다 · 블록 하나짜리 줄은 «모드 옵션으로 복사»
+- 타이틀 화면에서도 열린다(태그 · 바이옴 조건은 «접속 전» 으로 보인다)
 
-### 클라 명령 `/brr`
+## 명령 `/bcr`
 
 | 명령 | 하는 일 |
 |---|---|
-| `/brr list` | 규칙 목록 |
-| `/brr set <블록> render <default\|solid\|cutout\|translucent>` | 텍스처 방식 |
-| `/brr set <블록> cull <on\|off>` | 컬링 패스 |
-| `/brr set <블록> sway <0 ~ 5>` | 휘기 세기 |
-| `/brr remove <블록>` | 목록에서 빼기 |
-| `/brr blend <초>` | 휘기 블렌딩 초 |
-| `/brr reload` | 파일을 다시 읽기 |
+| `/bcr check` | 규칙 파일 문제(파일 · JSON 경로 · 까닭) |
+| `/bcr rule <블록>` | 그 블록의 최종 규칙과 칸마다 이긴 출처 |
+| `/bcr sound names <종류>` | 그 종류의 행동별 소리 이름과 찾은 결과 |
+| `/bcr sound template <종류>` | 그 종류의 리팩 `sounds.json` 틀 — 아직 없는 이름을 지금 들리는 소리로 채운 꼴 |
+| `/bcr debug sound [on [반지름] [blocks\|all\|blocked] \| off]` | 월드 소리 디버거 — 소리 자리에 글자 3줄(무슨 소리 · 어느 길 · 왜) · 반지름 기본 32 · 최대 64 |
+| `/bcr reload` | 모드 옵션 파일을 다시 읽기(리팩은 F3 + T) |
 
-응답은 명령을 친 사람 채팅에만 뜬다.
+응답과 디버거 글자는 명령을 친 사람 화면에만 뜬다.
 
-## 옛 모드에서 넘어오기
+## 서버 연출 소리 지키기 — 표식 시드
 
-설정 파일이 없을 때 한 번, 옛 `config/cull_pass.json`(컬링 패스 목록)과 `config/sway.json`(블록 → 세기)을 읽어 옮긴다. 옛 파일은 지우지 않는다.
-옛 `cull_pass-*.jar` · `sway-*.jar` 는 mods 폴더에서 빼야 한다 — 같이 있으면 게임이 «그 모드를 빼라» 고 알리고 켜지지 않는다.
+서버가 일부러 트는 연출 소리를 이 모드가 바꾸지 않게 할 수 있다.
+소리 시드의 위 16비트를 `0x5EED` 로 보내면, 이 모드는 그 소리를 갈아끼우지도 막지도 않는다.
+아래 48비트는 바닐라처럼 파일 고르기에 쓰이므로 소리는 전처럼 무작위로 골라진다.
+출처가 `master` · `ui` · `music` 인 서버 소리도 바꾸지 않는다.
+
+## 넘어오기
+
+- 옛 `block_render_rules` · `cull_pass` · `sway` · `presencefootsteps` jar 는 mods 폴더에서 빼야 한다 — 같이 있으면 게임이 «그 모드를 빼라» 고 알리고 켜지지 않는다
+- 옛 `config/block_render_rules.json` 은 읽지 않는다(지우지도 않는다) — 규칙은 리팩이나 새 모드 옵션 파일로 옮긴다
 
 ## 알려진 한계
 
 - 셰이더를 끈 상태에서는 기운 블록의 조명이 조금 어색하다(셰이더를 켜면 자연스럽다)
 - 같은 블록이 여러 칸 쌓인 기둥(사탕수수 · 대나무)과 매달린 덩굴은 칸마다 따로 기운다
-- 모드가 깔린 클라이언트에서만 보인다 — 다른 사람 화면도 같게 하려면 그 PC 에도 깐다
+- 모드가 깔린 클라이언트에서만 보이고 들린다 — 다른 사람도 같게 하려면 그 PC 에도 깐다
+- 남의 점프는 서버가 알려 주지 않아 발소리로 내지 않는다
 - ⚠ Sodium 쪽은 Sodium 내부 이름(`BlockOcclusionCache.shouldDrawSide` · `BlockRenderer.renderModel` · `processQuad`)에 기댄다 — Sodium 판을 올리면 다시 본다
 
 ## 파일
 
-| 파일 | 무엇 |
+| 폴더 | 무엇 |
 |---|---|
-| `config/BrrConfig.java` · `Rule.java` · `Render.java` · `Migration.java` | 설정 읽기 · 쓰기 · 옛 설정 옮기기 |
-| `mixin/ChunkRenderTypeMixin.java` | 텍스처 방식 — `ItemBlockRenderTypes.getChunkRenderType` · `getMovingBlockRenderType` 을 감싼다 |
-| `mixin/BlockFaceMixin.java` · `SodiumOcclusionMixin.java` | 컬링 패스 — 바닐라 · Sodium 면 판정 |
-| `sway/SwayMath.java` · `SwayEngine.java` | 휘기 판정 · 벡터 합 · 블렌딩 |
-| `mixin/SectionCompilerMixin.java` · `SodiumBlockRendererMixin.java` | 휘기 — 바닐라 · Sodium 청크를 지을 때 정점 비틀기 |
-| `screen/BrrScreen.java` · `command/BrrCommand.java` | 옵션 화면 · `/brr` |
+| `rules/` · `config/` | 규칙 파일 읽기 · 조건 · 층 겹치기 · 출처 · 모드 옵션 |
+| `sound/` | 소리 종류 · 이름 찾기 · `layers` · `mix` · 서버 패킷 판정 |
+| `step/` | 발소리 엔진 — 걸음 추적 · 발밑 블록 · 몹 · 지연 줄 |
+| `sway/` · `track/` | 휘기 · 엔티티 추적 |
+| `mixin/` | 렌더 · 컬링 · 휘기 · 소리 자리 |
+| `screen/` · `command/` · `debug/` | 설정 화면 · `/bcr` · 소리 디버거 |
+| `world/` · `game/` | 월드 바뀜 정리 · 게임 쪽 조회 |
 
 ## 빌드
 
 ```bash
 # JDK 21
 ./gradlew build
-# → build/libs/block_render_rules-2.0.0.jar
+# → build/libs/block_custom_rules-3.0.0.jar
 ```
 
 ## 출처 · 라이선스
 
-엔티티 위치로 블록을 기울이는 생각은 [SWAY](https://github.com/RazorPlay01/SWAY)(RazorPlay01)에서 얻었다. 코드는 옮겨 오지 않고 새로 썼다.
+엔티티 위치로 블록을 기울이는 생각은 [SWAY](https://github.com/RazorPlay01/SWAY)(RazorPlay01)에서 얻었다.
+발소리의 행동 · 덧소리 · 섞기 생각은 [Presence Footsteps](https://github.com/Sollace/Presence-Footsteps)(Sollace · MIT)에서 얻었다.
+두 모드 모두 코드는 옮겨 오지 않고 새로 썼다.
 
 **MIT** (`LICENSE`).
