@@ -32,6 +32,17 @@ public final class SoundNames {
 		return ns + ":block." + path + "." + rest;
 	}
 
+	/**
+	 * 발소리 행동 이름과 겹칠 뿐 발소리가 아닌 바닐라 소리인가 — 레지스트리의 `minecraft:block.<가운데>.<나머지>` 중 나머지가 `step` 이 아닌 것.
+	 * ⚠ 바닐라 종류(`minecraft:anvil`)로 `land` 를 찾으면 `block.anvil.land`(떨어지는 모루가 땅에 닿는 소리)가 걸린다 — 발소리 찾기에서는 없는 이름으로 본다.
+	 *
+	 * @param registered 게임 레지스트리 소리인가(리팩에만 있는 이름은 false — 리팩이 일부러 넣은 이름은 그대로 쓴다)
+	 */
+	public static boolean vanillaNotFootstep(String name, boolean registered) {
+		String[] s = split(name);
+		return registered && s != null && !"step".equals(s[1]);
+	}
+
 	/** 바닐라 소리 이름의 가운데 마디(`minecraft:block.wood.step` → `wood`) · 아니면 null. */
 	public static String mid(String soundId) {
 		String[] s = split(soundId);

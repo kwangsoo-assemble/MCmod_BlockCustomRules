@@ -428,7 +428,7 @@ public final class FootstepEngine {
 			}
 		}
 		kr.asmbl.block_custom_rules.sound.SoundCategories.Category k = snap.categories.get(id);
-		return k == null || k.parent() == null ? null : snap.categories.find(k.parent(), action, StepTracker.PARENTS_WALK, FootstepEngine::named);
+		return k == null || k.parent() == null ? null : snap.categories.find(k.parent(), action, StepTracker.PARENTS_WALK, FootstepEngine::stepNamed);
 	}
 
 	/** 그 블록의 소리 종류 — 규칙의 종류 · 없으면 바닐라 걸음 소리의 가운데 이름(`minecraft:<가운데>`) · 빈 소리면 null. */
@@ -446,9 +446,17 @@ public final class FootstepEngine {
 		return Rules.snapshot().sound.hasLayers(name) || SoundHub.defined(name);
 	}
 
+	/** 발소리 이름이 있나 — `named` 와 같되 걸음이 아닌 바닐라 소리(`block.anvil.land` 등)는 뺀다(`SoundNames.vanillaNotFootstep`). */
+	public static boolean stepNamed(String name) {
+		if (Rules.snapshot().sound.hasLayers(name)) {
+			return true;
+		}
+		return SoundHub.defined(name) && !SoundNames.vanillaNotFootstep(name, SoundHub.registered(name));
+	}
+
 	private static boolean hasName(BlockState s, String action) {
 		String cat = category(s);
-		return cat != null && Rules.snapshot().categories.find(cat, action, StepTracker.PARENTS_WALK, FootstepEngine::named) != null;
+		return cat != null && Rules.snapshot().categories.find(cat, action, StepTracker.PARENTS_WALK, FootstepEngine::stepNamed) != null;
 	}
 
 	/** 소리 하나 — 종류 › 행동 › 부모 › 끝내 없으면 바닐라 걸음(웅크림 · 지나감 · 입장 · 퇴장은 무음). 섞기 채널 배율 · 지연을 곱한다. */
@@ -467,7 +475,7 @@ public final class FootstepEngine {
 			return;
 		}
 		Map<String, String> parents = running ? StepTracker.PARENTS_RUN : StepTracker.PARENTS_WALK;
-		String name = snap.categories.find(cat, action, parents, FootstepEngine::named);
+		String name = snap.categories.find(cat, action, parents, FootstepEngine::stepNamed);
 		SoundType t = state.getSoundType();
 		String note = action + (mode == Mode.MUFFLED ? " · muffled" : "");
 		if (name == null) {
