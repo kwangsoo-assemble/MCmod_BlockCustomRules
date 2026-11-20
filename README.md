@@ -10,7 +10,7 @@
 
 | Item | Value |
 |---|---|
-| Version | `3.1.0` |
+| Version | `3.1.1` |
 | Target | Minecraft 1.21.8 · Fabric · **client only** |
 | Requires | Fabric Loader 0.19.3+ · Java 21 · Fabric API (command · lifecycle events · resource loader · rendering) |
 | Works with | Sodium 0.7.x (same result when Sodium renders terrain) · Iris (shader pack waving and shadows are added on top of sway) · Mod Menu (settings screen) |
@@ -53,6 +53,7 @@ The mod plays footsteps for players and mobs itself (within 16 blocks of the cam
 
 - One step every 0.95 blocks walked · separate rules for stairs and ladders · each left and right foot looks at its own block
 - Actions: `step` · `run` · `wander` (stopping, turning) · `jump` · `land` · `land_light` (both feet) · `climb` · `stairs_up` · `stairs_down` · `crawl` · `stand` (now and then while standing) · `<action>_sneak` while sneaking
+- Blocks without a rule look up vanilla names — but vanilla sounds that are not footsteps (`block.anvil.land` = a falling anvil · `block.pointed_dripstone.land` = falling dripstone) are skipped in favour of the parent action (`step`)
 - Extra sounds: `through` (walking through a non-colliding block in the foot cell — grass and the like) · `enter` · `exit` (when the foot cell's sound category changes) · overlay blocks such as carpets and snow layers play both the top (`top`) and the block below (`bottom`)
 - Thin supports such as bottom trapdoors and carpets are stepped on as themselves (even when placed over air)
 - Footwear: the equip sound name of the feet item is used as a category — if a pack defines that category, boots get their own sound
@@ -220,7 +221,7 @@ Server sounds from the `master` · `ui` · `music` sources are not changed eithe
 ```bash
 # JDK 21
 ./gradlew build
-# → build/libs/block_custom_rules-3.1.0.jar
+# → build/libs/block_custom_rules-3.1.1.jar
 ```
 
 ## Credits · license
@@ -243,7 +244,7 @@ No code was copied from either mod; it was written from scratch.
 
 | 항목 | 값 |
 |---|---|
-| 버전 | `3.1.0` |
+| 버전 | `3.1.1` |
 | 타깃 | Minecraft 1.21.8 · Fabric · **클라이언트 전용** |
 | 의존 | Fabric Loader 0.19.3+ · Java 21 · Fabric API(명령 · 생명 주기 이벤트 · 리소스 로더 · 렌더링) |
 | 함께 쓰면 | Sodium 0.7.x(지형을 Sodium 이 그릴 때도 같게) · Iris(셰이더팩 흔들림 · 그림자가 휘기 위에 더해진다) · Mod Menu(설정 화면) |
@@ -286,6 +287,7 @@ minecraft:block.stone.step  →  <종류 이름공간>:block.<종류>.step
 
 - 간격 0.95칸(걸은 거리 기준) · 계단 · 사다리는 따로 · 왼발 · 오른발마다 발밑 블록을 따로 본다
 - 행동: `step` · `run` · `wander`(멈춤 · 방향 꺾기) · `jump` · `land` · `land_light`(두 발) · `climb` · `stairs_up` · `stairs_down` · `crawl` · `stand`(멈춘 채 가끔) · 웅크리면 `<행동>_sneak`
+- 규칙 없는 블록은 바닐라 이름에서 찾는다 — 단 걸음 소리가 아닌 바닐라 소리(`block.anvil.land` = 떨어지는 모루 · `block.pointed_dripstone.land` = 떨어지는 종유석)는 건너뛰고 부모 행동(`step`)으로 간다
 - 덧소리: `through`(발 칸의 충돌 없는 블록을 지나감 — 풀숲 등) · `enter` · `exit`(발 칸의 소리 종류가 바뀔 때) · 카펫 · 눈 층 같은 겹침 블록은 위(`top`) · 아래(`bottom`) 둘 다
 - 바닥 다락문 · 카펫처럼 얇은 받침도 그 블록을 밟는다(허공에 놓였어도)
 - 신발: 발 칸 아이템의 장착 소리 이름을 종류로 쓴다 — 리팩이 그 종류를 정의하면 신발 소리가 난다
@@ -453,7 +455,7 @@ minecraft:block.stone.step  →  <종류 이름공간>:block.<종류>.step
 ```bash
 # JDK 21
 ./gradlew build
-# → build/libs/block_custom_rules-3.1.0.jar
+# → build/libs/block_custom_rules-3.1.1.jar
 ```
 
 ## 출처 · 라이선스
